@@ -1,0 +1,140 @@
+@import 'tailwindcss';
+
+/* ══════════════════════════════════════════════════════════
+   Gravlytics — Design Tokens (from PRD Brand & Identitas Visual)
+   ══════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Gravlytics Brand Colors ── */
+  --color-ink: #0E1116;
+  --color-ink-light: #161B22;
+  --color-ink-lighter: #1C2128;
+  --color-ink-border: #2D333B;
+
+  --color-primary: #6D5EF6;
+  --color-primary-hover: #7B6FF8;
+  --color-primary-muted: #6D5EF620;
+
+  --color-accent: #22D3EE;
+  --color-accent-hover: #38DCF2;
+  --color-accent-muted: #22D3EE20;
+
+  --color-surface: #F7F8FA;
+  --color-surface-dark: #0D1117;
+
+  --color-muted: #64748B;
+  --color-muted-light: #8B949E;
+
+  --color-positive: #10B981;
+  --color-positive-muted: #10B98120;
+
+  --color-warning: #F59E0B;
+  --color-warning-muted: #F59E0B20;
+
+  --color-danger: #EF4444;
+  --color-danger-muted: #EF444420;
+
+  /* ── Typography ── */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* ── Sizing ── */
+  --sidebar-width: 240px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Base Styles — Dark mode by default (Ink background)
+   ══════════════════════════════════════════════════════════ */
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-ink);
+  color: #E6EDF3;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Focus styles ── */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar (dark) ── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-ink);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* ── Selection ── */
+::selection {
+  background: var(--color-primary-muted);
+  color: white;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Utility Classes
+   ══════════════════════════════════════════════════════════ */
+
+/* Gradient accent (violet → cyan) */
+.gradient-accent {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+}
+
+.gradient-accent-text {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(22, 27, 34, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-ink-border);
+  border-radius: 12px;
+}
+
+/* KPI card */
+.kpi-card {
+  background: var(--color-ink-light);
+  border: 1px solid var(--color-ink-border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.kpi-card:hover {
+  border-color: var(--color-primary);
+}
+
+/* Trend indicator */
+.trend-up {
+  color: var(--color-positive);
+}
+
+.trend-down {
+  color: var(--color-danger);
+}
+
+.trend-neutral {
+  color: var(--color-muted);
+}

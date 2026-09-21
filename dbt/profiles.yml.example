@@ -1,0 +1,12 @@
+gravlytics_clickhouse:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      schema: gravlytics
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('CLICKHOUSE_NATIVE_PORT', '9000') | int }}"
+      user: "{{ env_var('CLICKHOUSE_USER', 'default') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD', 'gravlytics') }}"
+      secure: false
+      verify: false

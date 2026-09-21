@@ -1,0 +1,44 @@
+# Gravlytics
+
+# Dependencies data
+node_modules/
+.bun/
+
+# Build outputs
+dist/
+build/
+.svelte-kit/
+
+# Go
+services/collector/collector
+services/consumer/consumer
+services/query/query
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Infra data (podman volumes)
+infra/data/
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# Logs
+*.log
+
+# GeoIP database
+*.mmdb

@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: gravlytics
+    database: gravlytics
+    tables:
+      - name: events
+        description: "Raw events captured from Redpanda consumer"
