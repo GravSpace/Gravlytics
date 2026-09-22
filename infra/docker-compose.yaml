@@ -3,16 +3,21 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8-alpine
     container_name: gravlytics-clickhouse
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     ports:
-      - "8123:8123" # HTTP interface
-      - "9009:9000" # Native TCP
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123" # HTTP interface
+      - "${CLICKHOUSE_PORT:-9009}:9000" # Native TCP
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
-      CLICKHOUSE_DB: gravlytics
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: gravlytics_dev
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-gravlytics}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-gravlytics_dev}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ulimits:
       nofile:
@@ -30,19 +35,24 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: gravlytics-postgres
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     environment:
-      POSTGRES_DB: gravlytics
-      POSTGRES_USER: gravlytics
-      POSTGRES_PASSWORD: gravlytics_dev
+      POSTGRES_DB: ${POSTGRES_DB:-gravlytics}
+      POSTGRES_USER: ${POSTGRES_USER:-gravlytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gravlytics_dev}
     networks:
       - gravlytics-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gravlytics"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gravlytics} -d ${POSTGRES_DB:-gravlytics}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,6 +61,11 @@ services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v24.2.12
     container_name: gravlytics-redpanda
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     command:
       - redpanda start
       - --smp 1
@@ -76,6 +91,11 @@ services:
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:v2.7.2
     container_name: gravlytics-redpanda-console
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     profiles:
       - monitoring
     ports:
@@ -99,14 +119,27 @@ services:
   valkey:
     image: valkey/valkey:8-alpine
     container_name: gravlytics-valkey
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
+    command: >
+      sh -c '
+        if [ -n "$$VALKEY_PASSWORD" ]; then
+          exec valkey-server --requirepass "$$VALKEY_PASSWORD"
+        else
+          exec valkey-server
+        fi
+      '
     ports:
-      - "6379:6379"
+      - "${VALKEY_PORT:-6379}:6379"
     volumes:
       - valkey-data:/data
     networks:
       - gravlytics-net
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$VALKEY_PASSWORD\" ]; then valkey-cli -a \"$$VALKEY_PASSWORD\" ping; else valkey-cli ping; fi"]
       interval: 10s
       timeout: 5s
       retries: 5

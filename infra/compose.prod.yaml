@@ -4,6 +4,11 @@ services:
     image: caddy:2-alpine
     container_name: gravlytics-caddy
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     ports:
       - "80:80"
       - "443:443"
@@ -26,9 +31,14 @@ services:
     image: clickhouse/clickhouse-server:24.8-alpine
     container_name: gravlytics-clickhouse
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     ports:
-      - "8123:8123"
-      - "9009:9000"
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_PORT:-9009}:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -54,8 +64,13 @@ services:
     image: postgres:16-alpine
     container_name: gravlytics-postgres
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -66,7 +81,7 @@ services:
     networks:
       - gravlytics-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gravlytics"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gravlytics} -d ${POSTGRES_DB:-gravlytics}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -76,6 +91,11 @@ services:
     image: docker.redpanda.com/redpandadata/redpanda:v24.2.12
     container_name: gravlytics-redpanda
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     command:
       - redpanda start
       - --smp 1
@@ -102,14 +122,27 @@ services:
     image: valkey/valkey:8-alpine
     container_name: gravlytics-valkey
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
+    command: >
+      sh -c '
+        if [ -n "$$VALKEY_PASSWORD" ]; then
+          exec valkey-server --requirepass "$$VALKEY_PASSWORD"
+        else
+          exec valkey-server
+        fi
+      '
     ports:
-      - "6379:6379"
+      - "${VALKEY_PORT:-6379}:6379"
     volumes:
       - valkey-data:/data
     networks:
       - gravlytics-net
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$VALKEY_PASSWORD\" ]; then valkey-cli -a \"$$VALKEY_PASSWORD\" ping; else valkey-cli ping; fi"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -121,12 +154,18 @@ services:
       dockerfile: Dockerfile
     container_name: gravlytics-collector
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
-      COLLECTOR_PORT: "8081"
-      REDPANDA_BROKERS: "redpanda:9092"
-      REDPANDA_TOPIC_EVENTS: "events"
+      COLLECTOR_PORT: "${COLLECTOR_PORT:-8081}"
+      REDPANDA_BROKERS: "${REDPANDA_BROKERS:-redpanda:9092}"
+      REDPANDA_TOPIC_EVENTS: "${REDPANDA_TOPIC_EVENTS:-events}"
+      REDPANDA_TOPIC_DLQ: "${REDPANDA_TOPIC_DLQ:-events-dlq}"
     ports:
-      - "8081:8081"
+      - "${COLLECTOR_PORT:-8081}:${COLLECTOR_PORT:-8081}"
     networks:
       - gravlytics-net
     depends_on:
@@ -140,14 +179,22 @@ services:
       dockerfile: Dockerfile
     container_name: gravlytics-consumer
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
-      REDPANDA_BROKERS: "redpanda:9092"
-      REDPANDA_TOPIC_EVENTS: "events"
-      CLICKHOUSE_HOST: "clickhouse"
-      CLICKHOUSE_PORT: "9000"
-      CLICKHOUSE_DB: "gravlytics"
-      CLICKHOUSE_USER: "default"
+      REDPANDA_BROKERS: "${REDPANDA_BROKERS:-redpanda:9092}"
+      REDPANDA_TOPIC_EVENTS: "${REDPANDA_TOPIC_EVENTS:-events}"
+      CLICKHOUSE_HOST: "${CLICKHOUSE_HOST:-clickhouse}"
+      CLICKHOUSE_PORT: "${CLICKHOUSE_PORT:-9000}"
+      CLICKHOUSE_DB: "${CLICKHOUSE_DB:-gravlytics}"
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER:-default}"
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-gravlytics_dev}"
+      CONSUMER_GROUP: "${CONSUMER_GROUP:-gravlytics-consumer}"
+      CONSUMER_BATCH_SIZE: "${CONSUMER_BATCH_SIZE:-1000}"
+      CONSUMER_FLUSH_INTERVAL_MS: "${CONSUMER_FLUSH_INTERVAL_MS:-2000}"
     networks:
       - gravlytics-net
     depends_on:
@@ -163,17 +210,23 @@ services:
       dockerfile: Dockerfile
     container_name: gravlytics-query
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
-      QUERY_PORT: "8082"
-      CLICKHOUSE_HOST: "clickhouse"
-      CLICKHOUSE_PORT: "9000"
-      CLICKHOUSE_DB: "gravlytics"
-      CLICKHOUSE_USER: "default"
+      QUERY_PORT: "${QUERY_PORT:-8082}"
+      CLICKHOUSE_HOST: "${CLICKHOUSE_HOST:-clickhouse}"
+      CLICKHOUSE_PORT: "${CLICKHOUSE_PORT:-9000}"
+      CLICKHOUSE_DB: "${CLICKHOUSE_DB:-gravlytics}"
+      CLICKHOUSE_USER: "${CLICKHOUSE_USER:-default}"
       CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-gravlytics_dev}"
-      VALKEY_HOST: "valkey"
-      VALKEY_PORT: "6379"
+      VALKEY_HOST: "${VALKEY_HOST:-valkey}"
+      VALKEY_PORT: "${VALKEY_PORT:-6379}"
+      VALKEY_PASSWORD: "${VALKEY_PASSWORD:-}"
     ports:
-      - "8082:8082"
+      - "${QUERY_PORT:-8082}:${QUERY_PORT:-8082}"
     networks:
       - gravlytics-net
     depends_on:
@@ -189,11 +242,18 @@ services:
       dockerfile: Dockerfile
     container_name: gravlytics-web
     restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+      - path: .env
+        required: false
     environment:
-      NODE_ENV: "production"
+      NODE_ENV: "${NODE_ENV:-production}"
       DATABASE_URL: "postgres://${POSTGRES_USER:-gravlytics}:${POSTGRES_PASSWORD:-gravlytics_dev}@postgres:5432/${POSTGRES_DB:-gravlytics}"
-      VITE_QUERY_API_URL: "http://query:8082"
+      VITE_QUERY_API_URL: "http://query:${QUERY_PORT:-8082}"
       JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      PUBLIC_COLLECTOR_URL: "${PUBLIC_COLLECTOR_URL:-http://localhost:8081}"
+      PUBLIC_QUERY_API_URL: "${PUBLIC_QUERY_API_URL:-http://localhost:8082}"
     ports:
       - "3000:3000"
     networks:

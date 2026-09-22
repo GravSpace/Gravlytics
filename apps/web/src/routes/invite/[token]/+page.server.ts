@@ -13,7 +13,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	return {
-		invite,
+		invite: {
+			...invite.invitation,
+			orgName: invite.organization.name,
+			inviterName: invite.inviterName
+		},
 		user: locals.user || null
 	};
 };

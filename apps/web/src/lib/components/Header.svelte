@@ -19,12 +19,13 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import SiteSwitcher from '$lib/components/SiteSwitcher.svelte';
 	import CalendarPopover from '$lib/components/CalendarPopover.svelte';
+	import { FORMATTED_VERSION } from '$lib/version';
 
 	let { sidebarCollapsed = false }: { sidebarCollapsed: boolean } = $props();
 
 	let isUserMenuOpen = $state(false);
 
-	let user = $derived($page.data?.user || { name: 'Admin', email: 'admin@gravlytics.dev', role: 'admin' });
+	let user = $derived($page.data?.user || { name: 'User', email: '', role: 'viewer' });
 	let userInitials = $derived(
 		user.name
 			? user.name
@@ -198,6 +199,11 @@
 							<LogOut size={13} />
 							<span>Sign Out</span>
 						</a>
+					</div>
+
+					<div class="pt-1.5 pb-0.5 px-2.5 border-t border-themed/40 flex items-center justify-between text-[10px] text-hint font-mono">
+						<span>Gravlytics</span>
+						<span>{FORMATTED_VERSION}</span>
 					</div>
 				</div>
 			{/if}

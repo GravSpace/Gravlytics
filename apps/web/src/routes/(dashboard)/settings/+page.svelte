@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { User, Sliders, Globe, Users, Key, Check, AlertTriangle, Loader2 } from '@lucide/svelte';
 	import { onMount } from 'svelte';
+	import { FORMATTED_VERSION } from '$lib/version';
 
 	let orgName = $state('');
 	let orgSlug = $state('');
@@ -106,11 +107,16 @@
 	<div class="card-inset p-5 flex flex-col gap-4 relative">
 		<div class="flex items-center justify-between">
 			<h2 class="text-xs font-semibold uppercase tracking-wider text-body">General Information</h2>
-			{#if role}
-				<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-					Role: {role}
+			<div class="flex items-center gap-2">
+				<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-input text-label border border-themed">
+					Version: {FORMATTED_VERSION}
 				</span>
-			{/if}
+				{#if role}
+					<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+						Role: {role}
+					</span>
+				{/if}
+			</div>
 		</div>
 
 		{#if errorMessage}

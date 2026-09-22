@@ -44,7 +44,7 @@
 		}, 2000);
 	}
 
-	const activeSiteId = $derived(siteStore.activeSiteId || 'gly_demo_8829');
+	const activeSiteId = $derived(siteStore.activeSiteId || 'YOUR_TRACKING_ID');
 
 	const gtmSnippet = $derived(
 `<!-- Gravlytics Analytics Tag for Google Tag Manager -->
@@ -244,11 +244,21 @@ requests.post(f"{API_BASE}/event", json=payload, headers=HEADERS)`
 <div class="flex flex-col gap-6 max-w-5xl">
 	<!-- Header -->
 	<div class="flex flex-col gap-1.5 border-b border-themed pb-5">
-		<div class="flex items-center gap-2">
-			<div class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-				<BookOpen size={16} />
+		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+			<div class="flex items-center gap-2.5">
+				<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+					<BookOpen size={20} />
+				</div>
+				<h1 class="text-xl font-bold tracking-tight text-heading">Documentation & Integration Guide</h1>
 			</div>
-			<h1 class="text-xl font-bold tracking-tight text-heading">Documentation & Integration Guide</h1>
+			<a
+				href="/docs/proxy"
+				class="flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-emerald-600/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-600/20 transition-colors"
+			>
+				<ShieldCheck size={14} />
+				<span>AdBlocker Bypass Wizard</span>
+				<ArrowRight size={12} />
+			</a>
 		</div>
 		<p class="text-xs text-label">
 			Comprehensive guide for Google Tag Manager, HTML analytics scripts, Google dataLayer, Web Vitals, Ads Viewability, Bot/DDoS Mitigation, and External REST API Reference.

@@ -15,6 +15,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 			name: s.name,
 			trackingId: s.trackingId,
 			timezone: s.timezone,
+			isPublic: Boolean(s.isPublic),
+			hasPassword: Boolean(s.sharePasswordHash),
 			createdAt: s.createdAt
 		}))
 	);
@@ -32,6 +34,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ error: 'Domain is required' }, { status: 400 });
 		}
 		const site = await db.createSiteForUser(locals.user.id, domain.trim(), (name || domain).trim());
+		const orgs = await db.getUserOrgs(locals.user.id);
+		if (orgs.length > 0) {
+			await db.logAuditEvent(orgs[0].id, locals.user.id, 'site.created', { domain: site.domain, name: site.name });
+		}
 		return json({
 			id: site.id,
 			domain: site.domain,
@@ -55,5 +61,11 @@ export const DELETE: RequestHandler = async ({ url, locals }) => {
 		return json({ error: 'Missing id parameter' }, { status: 400 });
 	}
 	const success = await db.deleteSiteForUser(locals.user.id, id);
+	if (success) {
+		const orgs = await db.getUserOrgs(locals.user.id);
+		if (orgs.length > 0) {
+			await db.logAuditEvent(orgs[0].id, locals.user.id, 'site.deleted', { siteId: id });
+		}
+	}
 	return json({ success });
 };

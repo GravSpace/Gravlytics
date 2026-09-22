@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 
 export const GET: RequestHandler = async ({ url }) => {
-	const siteId = url.searchParams.get('site_id') || 'gly_demo_8829';
+	const siteId = url.searchParams.get('site_id');
+	if (!siteId) return json([]);
 	const goals = await db.getGoals(siteId);
 	return json(
 		goals.map((g) => ({

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { BarChart3 } from '@lucide/svelte';
+	import { BarChart3, Pin, Plus } from '@lucide/svelte';
 
 	type DataPoint = {
 		label: string;
@@ -7,11 +7,22 @@
 		visitors: number;
 	};
 
-	type Props = {
-		data: DataPoint[];
+	export type AnnotationItem = {
+		id: string;
+		date: string;
+		title: string;
+		description?: string;
+		category: string;
+		color: string;
 	};
 
-	let { data }: Props = $props();
+	type Props = {
+		data: DataPoint[];
+		annotations?: AnnotationItem[];
+		onAddAnnotation?: () => void;
+	};
+
+	let { data, annotations = [], onAddAnnotation }: Props = $props();
 
 	// Calculate chart dimensions
 	const maxValue = $derived(
@@ -31,7 +42,18 @@
 			</div>
 			<h3 class="text-xs font-semibold uppercase tracking-wider text-body">Traffic Activity</h3>
 		</div>
-		<div class="flex items-center gap-4 text-[11px] font-mono">
+		<div class="flex items-center gap-3 text-[11px] font-mono">
+			{#if onAddAnnotation}
+				<button
+					type="button"
+					onclick={onAddAnnotation}
+					class="flex items-center gap-1 rounded bg-input border border-themed px-2 py-0.5 text-[11px] font-sans text-label hover:text-heading hover:bg-card-hover transition-colors"
+					title="Add event annotation"
+				>
+					<Pin size={11} class="text-indigo-400" />
+					<span>Add Note</span>
+				</button>
+			{/if}
 			<span class="flex items-center gap-1.5 text-body">
 				<span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
 				<span>Pageviews</span>
@@ -92,4 +114,20 @@
 			{/if}
 		{/each}
 	</div>
+
+	<!-- Annotation Event Timeline Ribbon -->
+	{#if annotations.length > 0}
+		<div class="mt-3 flex flex-wrap items-center gap-1.5 border-t border-themed pt-2.5">
+			<span class="text-[10px] text-hint flex items-center gap-1"><Pin size={10} /> Events:</span>
+			{#each annotations as note}
+				<span
+					class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-mono border {note.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : note.color === 'amber' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : note.color === 'rose' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}"
+					title="{note.date}: {note.title}{note.description ? ' - ' + note.description : ''}"
+				>
+					<span class="text-hint font-sans">{note.date}</span>
+					<span class="font-semibold font-sans text-heading">{note.title}</span>
+				</span>
+			{/each}
+		</div>
+	{/if}
 </div>

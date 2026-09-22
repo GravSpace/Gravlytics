@@ -21,7 +21,7 @@ function toUUID(id: string): string {
 		return id;
 	}
 	if (idMap.has(id)) return idMap.get(id)!;
-	
+
 	// Create deterministic UUID from string hash
 	const hash = crypto.createHash('md5').update(id).digest('hex');
 	const uuid = [

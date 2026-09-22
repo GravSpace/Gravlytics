@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
+import { env } from '$env/dynamic/private';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'gravlytics-super-secure-jwt-secret-change-in-prod';
+function getJwtSecret(): string {
+	return env.JWT_SECRET || process.env.JWT_SECRET || 'gravlytics-super-secure-jwt-secret-change-in-prod';
+}
 
 export interface JWTPayload {
 	userId: string;
@@ -56,7 +59,7 @@ export function signJWT(payload: JWTPayload, expiresInSeconds = 86400 * 7): stri
 	const encodedPayload = base64UrlEncode(JSON.stringify(completePayload));
 
 	const signature = crypto
-		.createHmac('sha256', JWT_SECRET)
+		.createHmac('sha256', getJwtSecret())
 		.update(`${encodedHeader}.${encodedPayload}`)
 		.digest('base64')
 		.replace(/=/g, '')
@@ -73,7 +76,7 @@ export function verifyJWT(token: string): JWTPayload | null {
 
 		const [header, payload, signature] = parts;
 		const expectedSig = crypto
-			.createHmac('sha256', JWT_SECRET)
+			.createHmac('sha256', getJwtSecret())
 			.update(`${header}.${payload}`)
 			.digest('base64')
 			.replace(/=/g, '')

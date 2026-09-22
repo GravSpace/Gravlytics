@@ -105,8 +105,8 @@
 
 		<!-- OAuth Buttons -->
 		<div class="grid grid-cols-2 gap-3">
-			<button
-				type="button"
+			<a
+				href="/api/auth/oauth/github"
 				class="flex items-center justify-center gap-2 rounded-lg border border-themed-strong bg-input hover:bg-card-hover py-2 text-xs font-medium text-heading transition-colors hover:border-primary/50 shadow-sm"
 			>
 				<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
@@ -115,9 +115,9 @@
 					/>
 				</svg>
 				GitHub
-			</button>
-			<button
-				type="button"
+			</a>
+			<a
+				href="/api/auth/oauth/google"
 				class="flex items-center justify-center gap-2 rounded-lg border border-themed-strong bg-input hover:bg-card-hover py-2 text-xs font-medium text-heading transition-colors hover:border-primary/50 shadow-sm"
 			>
 				<svg class="h-4 w-4" viewBox="0 0 24 24">
@@ -139,7 +139,7 @@
 					/>
 				</svg>
 				Google
-			</button>
+			</a>
 		</div>
 
 		<!-- Footer Link -->

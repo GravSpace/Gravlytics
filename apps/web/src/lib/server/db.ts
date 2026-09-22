@@ -1,5 +1,5 @@
 // Gravlytics Database Client
-// Uses Bun's native SQL driver with fallback persistent store for seamless local dev & testing
+// Powered by Drizzle ORM over PostgreSQL
 
 export interface User {
 	id: string;
@@ -44,6 +44,8 @@ export interface Site {
 	timezone: string;
 	trackingId: string;
 	public: boolean;
+	isPublic?: boolean;
+	sharePasswordHash?: string | null;
 	createdAt: string;
 }
 
@@ -66,160 +68,31 @@ export interface Goal {
 	createdAt: string;
 }
 
-import fs from 'node:fs';
-import path from 'node:path';
 import { hashPassword, verifyPassword } from './crypto';
+import {
+	drizzleDb,
+	users,
+	organizations,
+	memberships,
+	invitations,
+	sites,
+	apiKeys,
+	goals,
+	savedReports,
+	alerts,
+	auditLogs,
+	siteAnnotations,
+	eq,
+	and,
+	or,
+	desc,
+	asc,
+	sql,
+	pgClient
+} from './drizzle';
 
-const DATA_DIR = path.resolve(process.cwd(), '.data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const WORKSPACE_FILE = path.join(DATA_DIR, 'workspace.json');
-
-function initUsers(): (User & { passwordHash: string })[] {
-	try {
-		if (fs.existsSync(USERS_FILE)) {
-			const content = fs.readFileSync(USERS_FILE, 'utf-8');
-			const parsed = JSON.parse(content);
-			if (Array.isArray(parsed) && parsed.length > 0) {
-				return parsed;
-			}
-		}
-	} catch {}
-
-	const defaultAdmin = {
-		id: 'usr_admin_default',
-		email: 'admin@gravlytics.dev',
-		name: 'Admin Gravlytics',
-		passwordHash: hashPassword('password123'),
-		createdAt: '2026-01-15T00:00:00.000Z'
-	};
-	const defaultDemo = {
-		id: 'usr_demo_default',
-		email: 'demo@gravlytics.com',
-		name: 'Demo Analyst',
-		passwordHash: hashPassword('password123'),
-		createdAt: '2026-02-01T00:00:00.000Z'
-	};
-	const initial = [defaultAdmin, defaultDemo];
-	saveUsers(initial);
-	return initial;
-}
-
-function saveUsers(users: (User & { passwordHash: string })[]) {
-	try {
-		if (!fs.existsSync(DATA_DIR)) {
-			fs.mkdirSync(DATA_DIR, { recursive: true });
-		}
-		fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
-	} catch {}
-}
-
-interface WorkspaceStore {
-	orgs: Organization[];
-	members: OrganizationMember[];
-	sites: Site[];
-	apiKeys: ApiKey[];
-	invitations: Invitation[];
-}
-
-function initWorkspace(): WorkspaceStore {
-	try {
-		if (fs.existsSync(WORKSPACE_FILE)) {
-			const content = fs.readFileSync(WORKSPACE_FILE, 'utf-8');
-			const parsed = JSON.parse(content);
-			if (parsed && Array.isArray(parsed.orgs) && Array.isArray(parsed.sites)) {
-				return parsed;
-			}
-		}
-	} catch {}
-
-	const defaultStore: WorkspaceStore = {
-		orgs: [
-			{ id: 'org-admin-1', name: 'Gravlytics Official Team', slug: 'gravlytics-official' },
-			{ id: 'org-demo-1', name: 'Demo Workspace', slug: 'demo-workspace' }
-		],
-		members: [
-			{
-				id: 'mem-admin-1',
-				orgId: 'org-admin-1',
-				userId: 'usr_admin_default',
-				role: 'Owner',
-				joinedAt: '2026-01-15'
-			},
-			{
-				id: 'mem-demo-1',
-				orgId: 'org-demo-1',
-				userId: 'usr_demo_default',
-				role: 'Owner',
-				joinedAt: '2026-02-01'
-			}
-		],
-		sites: [
-			{
-				id: 'site-demo-1',
-				orgId: 'org-admin-1',
-				domain: 'gravlytics.dev',
-				name: 'Gravlytics Official',
-				timezone: 'UTC',
-				trackingId: 'gly_demo_8829',
-				public: true,
-				createdAt: '2026-01-15T00:00:00.000Z'
-			},
-			{
-				id: 'site-demo-2',
-				orgId: 'org-admin-1',
-				domain: 'docs.gravlytics.dev',
-				name: 'Documentation',
-				timezone: 'UTC',
-				trackingId: 'gly_demo_9912',
-				public: false,
-				createdAt: '2026-01-20T00:00:00.000Z'
-			},
-			{
-				id: 'site-demo-3',
-				orgId: 'org-demo-1',
-				domain: 'my-store.example.com',
-				name: 'My Demo Store',
-				timezone: 'UTC',
-				trackingId: 'gly_demo_4412',
-				public: true,
-				createdAt: '2026-02-01T00:00:00.000Z'
-			}
-		],
-		apiKeys: [
-			{
-				id: 'key-demo-1',
-				siteId: 'site-demo-1',
-				name: 'Production Ingestion Key',
-				prefix: 'gly_demo',
-				scope: 'all',
-				createdAt: new Date().toISOString(),
-				lastUsedAt: new Date().toISOString()
-			}
-		],
-		invitations: []
-	};
-
-	saveWorkspace(defaultStore);
-	return defaultStore;
-}
-
-function saveWorkspace(store: WorkspaceStore) {
-	try {
-		if (!fs.existsSync(DATA_DIR)) {
-			fs.mkdirSync(DATA_DIR, { recursive: true });
-		}
-		fs.writeFileSync(WORKSPACE_FILE, JSON.stringify(store, null, 2), 'utf-8');
-	} catch {}
-}
-
-const mockUsers: (User & { passwordHash: string })[] = initUsers();
-const workspace: WorkspaceStore = initWorkspace();
-const mockOrgs: Organization[] = workspace.orgs;
-const mockMembers: OrganizationMember[] = workspace.members;
-const mockSites: Site[] = workspace.sites;
-const mockApiKeys: ApiKey[] = workspace.apiKeys;
-const mockInvitations: Invitation[] = workspace.invitations;
-const mockGoals: Goal[] = [];
+export { drizzleDb, pgClient, sql, eq, and, or, desc, asc };
+export * from './schema';
 
 // Helper functions for role mapping and UUID validation
 function formatRole(role: string | null | undefined): 'Owner' | 'Admin' | 'Editor' | 'Viewer' {
@@ -253,1029 +126,652 @@ function isUuid(val: string | null | undefined): boolean {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 }
 
-// Initialize Bun SQL instance if available at runtime
-const dbUrl =
-	process.env.DATABASE_URL ||
-	`postgres://${process.env.POSTGRES_USER || 'gravlytics'}:${process.env.POSTGRES_PASSWORD || 'gravlytics_dev'}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'gravlytics'}`;
-
-const BunSQL = (globalThis as any).Bun?.SQL;
-let sql: any = null;
-if (BunSQL) {
-	try {
-		sql = new BunSQL(dbUrl);
-		// Asynchronously verify table additions
-		(async () => {
-			try {
-				await sql`ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin';`;
-			} catch {}
-			try {
-				await sql`
-					CREATE TABLE IF NOT EXISTS invitations (
-						id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-						org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-						inviter_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-						email           VARCHAR(255) NOT NULL,
-						role            user_role NOT NULL DEFAULT 'viewer',
-						token           VARCHAR(255) NOT NULL UNIQUE,
-						status          VARCHAR(50) NOT NULL DEFAULT 'pending',
-						created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-						expires_at      TIMESTAMPTZ NOT NULL
-					)
-				`;
-				await sql`CREATE INDEX IF NOT EXISTS idx_invitations_org ON invitations(org_id)`;
-				await sql`CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token)`;
-			} catch {}
-		})().catch(() => {});
-	} catch {
-		sql = null;
-	}
-}
-
 export const db = {
 	// ── Users ──
-	async findUserByEmail(email: string) {
-		if (sql) {
-			try {
-				const rows = await sql`
-					SELECT id, email, password_hash as "passwordHash", name, avatar_url as "avatarUrl", created_at as "createdAt"
-					FROM users
-					WHERE LOWER(email) = LOWER(${email.trim()})
-					LIMIT 1
-				`;
-				if (rows && rows.length > 0) return rows[0] as (User & { passwordHash: string });
-			} catch (err) {
-				console.error('[db:findUserByEmail] PostgreSQL error:', err);
-			}
-		}
-		return mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
-	},
 
-	async findUserById(id: string) {
-		if (sql) {
-			try {
-				if (isUuid(id)) {
-					const rows = await sql`
-						SELECT u.id, u.email, u.name, u.avatar_url as "avatarUrl", u.created_at as "createdAt", m.role
-						FROM users u
-						LEFT JOIN memberships m ON m.user_id = u.id
-						WHERE u.id = ${id}::uuid
-						LIMIT 1
-					`;
-					if (rows && rows.length > 0) {
-						const r = rows[0];
-						return {
-							id: r.id,
-							email: r.email,
-							name: r.name,
-							avatarUrl: r.avatarUrl,
-							createdAt: r.createdAt,
-							role: formatRole(r.role)
-						} as User;
-					}
-				}
-			} catch (err) {
-				console.error('[db:findUserById] PostgreSQL error:', err);
-			}
-		}
-		const user = mockUsers.find((u) => u.id === id);
-		if (!user) return null;
-		const { passwordHash: _, ...safeUser } = user;
-		const membership = mockMembers.find((m) => m.userId === safeUser.id);
-		return { ...safeUser, role: membership ? membership.role : ('Owner' as const) };
-	},
-
-	async createUser(email: string, passwordHash: string, name: string) {
-		if (sql) {
-			try {
-				const [user] = await sql`
-					INSERT INTO users (email, password_hash, name)
-					VALUES (${email.trim().toLowerCase()}, ${passwordHash}, ${name.trim()})
-					RETURNING id, email, name, avatar_url as "avatarUrl", created_at as "createdAt"
-				`;
-
-				const slug = 'org-' + user.id.substring(0, 8);
-				const [org] = await sql`
-					INSERT INTO organizations (name, slug)
-					VALUES (${`${name}'s Workspace`}, ${slug})
-					RETURNING id, name, slug
-				`;
-
-				await sql`
-					INSERT INTO memberships (user_id, org_id, role)
-					VALUES (${user.id}::uuid, ${org.id}::uuid, 'owner'::user_role)
-				`;
-
-				const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
-				await sql`
-					INSERT INTO sites (org_id, domain, name, timezone, tracking_id, public)
-					VALUES (${org.id}::uuid, 'my-website.com', ${`${name}'s Site`}, 'UTC', ${trackingId}, true)
-				`;
-
-				return { ...user, role: 'Owner' } as User;
-			} catch (err) {
-				console.error('[db:createUser] PostgreSQL error, falling back to local store:', err);
-			}
-		}
-
-		const user = {
-			id: 'usr_' + Math.random().toString(36).substring(2, 10),
-			email: email.toLowerCase(),
-			passwordHash,
-			name,
-			createdAt: new Date().toISOString()
-		};
-		mockUsers.push(user);
-		saveUsers(mockUsers);
-
-		const orgId = 'org_' + user.id.substring(4);
-		const org: Organization = {
-			id: orgId,
-			name: `${name}'s Workspace`,
-			slug: 'org-' + user.id.substring(4)
-		};
-		mockOrgs.push(org);
-
-		mockMembers.push({
-			id: 'mem_' + Math.random().toString(36).substring(2, 8),
-			orgId,
-			userId: user.id,
-			role: 'Owner',
-			joinedAt: new Date().toISOString().split('T')[0]
+	async findUserByEmail(email: string): Promise<(User & { passwordHash: string }) | null> {
+		const user = await drizzleDb.query.users.findFirst({
+			where: eq(sql`LOWER(${users.email})`, email.trim().toLowerCase())
 		});
-
-		const initialSite: Site = {
-			id: 'site_' + Math.random().toString(36).substring(2, 10),
-			orgId,
-			domain: 'my-website.com',
-			name: `${name}'s Site`,
-			timezone: 'UTC',
-			trackingId: 'gly_' + Math.random().toString(36).substring(2, 8),
-			public: true,
-			createdAt: new Date().toISOString()
+		if (!user) return null;
+		return {
+			id: user.id,
+			email: user.email,
+			passwordHash: user.passwordHash || '',
+			name: user.name,
+			avatarUrl: user.avatarUrl || '',
+			createdAt: user.createdAt.toISOString()
 		};
-		mockSites.push(initialSite);
-		saveWorkspace(workspace);
+	},
 
-		const { passwordHash: _, ...safeUser } = user;
-		return safeUser;
+	async findUserById(id: string): Promise<User | null> {
+		if (!isUuid(id)) return null;
+		const user = await drizzleDb.query.users.findFirst({
+			where: eq(users.id, id),
+			with: {
+				memberships: {
+					limit: 1
+				}
+			}
+		});
+		if (!user) return null;
+		const role = user.memberships?.[0]?.role;
+		return {
+			id: user.id,
+			email: user.email,
+			name: user.name,
+			avatarUrl: user.avatarUrl || '',
+			createdAt: user.createdAt.toISOString(),
+			role: formatRole(role)
+		};
+	},
+
+	async createUser(email: string, passwordHash: string, name: string): Promise<User> {
+		return await drizzleDb.transaction(async (tx) => {
+			const [user] = await tx
+				.insert(users)
+				.values({
+					email: email.trim().toLowerCase(),
+					passwordHash,
+					name: name.trim()
+				})
+				.returning();
+
+			const slug = 'org-' + user.id.substring(0, 8);
+			const [org] = await tx
+				.insert(organizations)
+				.values({
+					name: `${name.trim()}'s Workspace`,
+					slug
+				})
+				.returning();
+
+			await tx.insert(memberships).values({
+				userId: user.id,
+				orgId: org.id,
+				role: 'owner'
+			});
+
+			return {
+				id: user.id,
+				email: user.email,
+				name: user.name,
+				avatarUrl: user.avatarUrl || '',
+				createdAt: user.createdAt.toISOString(),
+				role: 'Owner'
+			};
+		});
 	},
 
 	async updateUserProfile(userId: string, name: string, email: string): Promise<User | null> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const rows = await sql`
-						UPDATE users
-						SET name = ${name.trim()}, email = ${email.trim().toLowerCase()}
-						WHERE id = ${userId}::uuid
-						RETURNING id, email, name, avatar_url as "avatarUrl", created_at as "createdAt"
-					`;
-					if (rows && rows.length > 0) return rows[0] as User;
-				}
-			} catch (err) {
-				console.error('[db:updateUserProfile] PostgreSQL error:', err);
-			}
-		}
+		if (!isUuid(userId)) return null;
+		const [updated] = await drizzleDb
+			.update(users)
+			.set({
+				name: name.trim(),
+				email: email.trim().toLowerCase()
+			})
+			.where(eq(users.id, userId))
+			.returning();
 
-		const user = mockUsers.find((u) => u.id === userId);
-		if (!user) return null;
-
-		user.name = name.trim();
-		user.email = email.trim().toLowerCase();
-		saveUsers(mockUsers);
-
-		const { passwordHash: _, ...safeUser } = user;
-		return safeUser;
+		if (!updated) return null;
+		return {
+			id: updated.id,
+			email: updated.email,
+			name: updated.name,
+			avatarUrl: updated.avatarUrl || '',
+			createdAt: updated.createdAt.toISOString()
+		};
 	},
 
 	async updateUserPassword(userId: string, oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const [user] = await sql`
-						SELECT id, password_hash as "passwordHash"
-						FROM users
-						WHERE id = ${userId}::uuid
-						LIMIT 1
-					`;
-					if (!user) return { success: false, error: 'User not found' };
+		if (!isUuid(userId)) return { success: false, error: 'User not found' };
+		const user = await drizzleDb.query.users.findFirst({
+			where: eq(users.id, userId),
+			columns: { passwordHash: true }
+		});
+		if (!user || !user.passwordHash) return { success: false, error: 'User not found' };
 
-					if (!verifyPassword(oldPassword, user.passwordHash)) {
-						return { success: false, error: 'Current password is incorrect' };
-					}
+		const isValid = verifyPassword(oldPassword, user.passwordHash);
+		if (!isValid) return { success: false, error: 'Current password is incorrect' };
 
-					await sql`
-						UPDATE users
-						SET password_hash = ${hashPassword(newPassword)}
-						WHERE id = ${userId}::uuid
-					`;
-					return { success: true };
-				}
-			} catch (err) {
-				console.error('[db:updateUserPassword] PostgreSQL error:', err);
-			}
-		}
-
-		const user = mockUsers.find((u) => u.id === userId);
-		if (!user) return { success: false, error: 'User not found' };
-
-		if (!verifyPassword(oldPassword, user.passwordHash)) {
-			return { success: false, error: 'Current password is incorrect' };
-		}
-
-		user.passwordHash = hashPassword(newPassword);
-		saveUsers(mockUsers);
+		const newHash = hashPassword(newPassword);
+		await drizzleDb.update(users).set({ passwordHash: newHash }).where(eq(users.id, userId));
 		return { success: true };
 	},
 
-	// ── Multi-Tenant Organizations & Memberships ──
+	// ── Organizations & Memberships ──
 
 	async getUserOrganizations(userId: string): Promise<Organization[]> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const orgs = await sql`
-						SELECT o.id, o.name, o.slug
-						FROM organizations o
-						JOIN memberships m ON m.org_id = o.id
-						WHERE m.user_id = ${userId}::uuid
-						ORDER BY m.created_at ASC
-					`;
-					if (orgs && orgs.length > 0) return orgs as Organization[];
-
-					const [user] = await sql`SELECT id, name FROM users WHERE id = ${userId}::uuid LIMIT 1`;
-					if (user) {
-						const slug = 'org-' + user.id.substring(0, 8);
-						const [newOrg] = await sql`
-							INSERT INTO organizations (name, slug)
-							VALUES (${`${user.name}'s Workspace`}, ${slug})
-							RETURNING id, name, slug
-						`;
-						await sql`
-							INSERT INTO memberships (user_id, org_id, role)
-							VALUES (${user.id}::uuid, ${newOrg.id}::uuid, 'owner'::user_role)
-						`;
-						return [newOrg] as Organization[];
-					}
-				}
-			} catch (err) {
-				console.error('[db:getUserOrganizations] PostgreSQL error:', err);
-			}
-		}
-
-		let userMemberships = mockMembers.filter((m) => m.userId === userId);
-		if (userMemberships.length === 0) {
-			const user = mockUsers.find((u) => u.id === userId);
-			const name = user ? user.name : 'Personal';
-			const orgId = 'org_' + userId.substring(4);
-			const newOrg: Organization = {
-				id: orgId,
-				name: `${name}'s Workspace`,
-				slug: 'org-' + userId.substring(4)
-			};
-			mockOrgs.push(newOrg);
-			mockMembers.push({
-				id: 'mem_' + Math.random().toString(36).substring(2, 8),
-				orgId,
-				userId,
-				role: 'Owner',
-				joinedAt: new Date().toISOString().split('T')[0]
-			});
-			saveWorkspace(workspace);
-			userMemberships = [mockMembers[mockMembers.length - 1]];
-		}
-
-		const orgIds = new Set(userMemberships.map((m) => m.orgId));
-		return mockOrgs.filter((o) => orgIds.has(o.id));
+		if (!isUuid(userId)) return [];
+		const rows = await drizzleDb
+			.select({
+				id: organizations.id,
+				name: organizations.name,
+				slug: organizations.slug
+			})
+			.from(organizations)
+			.innerJoin(memberships, eq(memberships.orgId, organizations.id))
+			.where(eq(memberships.userId, userId))
+			.orderBy(asc(organizations.createdAt));
+		return rows;
 	},
 
-	async getOrganizationForUser(userId: string): Promise<{ organization: Organization; role: 'Owner' | 'Admin' | 'Editor' | 'Viewer' } | null> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const rows = await sql`
-						SELECT o.id, o.name, o.slug, m.role
-						FROM organizations o
-						JOIN memberships m ON m.org_id = o.id
-						WHERE m.user_id = ${userId}::uuid
-						ORDER BY m.created_at ASC
-						LIMIT 1
-					`;
-					if (rows && rows.length > 0) {
-						const r = rows[0];
-						return {
-							organization: { id: r.id, name: r.name, slug: r.slug },
-							role: formatRole(r.role)
-						};
-					}
-				}
-			} catch (err) {
-				console.error('[db:getOrganizationForUser] PostgreSQL error:', err);
-			}
+	async getUserOrgs(userId: string): Promise<Organization[]> {
+		return await this.getUserOrganizations(userId);
+	},
+
+	async getOrganizationForUser(userId: string, orgId?: string): Promise<{ organization: Organization; role: 'Owner' | 'Admin' | 'Editor' | 'Viewer' } | null> {
+		if (!isUuid(userId)) return null;
+		const conditions = [eq(memberships.userId, userId)];
+		if (orgId && isUuid(orgId)) {
+			conditions.push(eq(organizations.id, orgId));
 		}
+		const rows = await drizzleDb
+			.select({
+				id: organizations.id,
+				name: organizations.name,
+				slug: organizations.slug,
+				role: memberships.role
+			})
+			.from(organizations)
+			.innerJoin(memberships, eq(memberships.orgId, organizations.id))
+			.where(and(...conditions))
+			.orderBy(asc(organizations.createdAt))
+			.limit(1);
 
-		const orgs = await this.getUserOrganizations(userId);
-		const org = orgs[0];
-		if (!org) return null;
-
-		const membership = mockMembers.find((m) => m.orgId === org.id && m.userId === userId);
+		if (rows.length === 0) return null;
 		return {
-			organization: org,
-			role: membership ? membership.role : 'Owner'
+			organization: {
+				id: rows[0].id,
+				name: rows[0].name,
+				slug: rows[0].slug
+			},
+			role: formatRole(rows[0].role)
 		};
 	},
 
-	async updateOrganizationForUser(userId: string, orgId: string, name: string, slug: string): Promise<Organization | null> {
-		if (sql) {
-			try {
-				if (isUuid(orgId) && isUuid(userId)) {
-					const [m] = await sql`
-						SELECT role FROM memberships
-						WHERE org_id = ${orgId}::uuid AND user_id = ${userId}::uuid
-						LIMIT 1
-					`;
-					if (!m || (m.role !== 'owner' && m.role !== 'admin')) {
-						throw new Error('Insufficient permissions to update organization settings');
-					}
-
-					const cleanSlug = slug ? slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') : undefined;
-					let updated;
-					if (cleanSlug) {
-						[updated] = await sql`
-							UPDATE organizations
-							SET name = ${name.trim()}, slug = ${cleanSlug}
-							WHERE id = ${orgId}::uuid
-							RETURNING id, name, slug
-						`;
-					} else {
-						[updated] = await sql`
-							UPDATE organizations
-							SET name = ${name.trim()}
-							WHERE id = ${orgId}::uuid
-							RETURNING id, name, slug
-						`;
-					}
-					if (updated) return updated as Organization;
-				}
-			} catch (err: any) {
-				if (err.message?.includes('Insufficient permissions')) throw err;
-				console.error('[db:updateOrganizationForUser] PostgreSQL error:', err);
-			}
+	async updateOrganizationForUser(userId: string, orgId: string, name: string, slug?: string): Promise<Organization | null> {
+		if (!isUuid(userId) || !isUuid(orgId)) return null;
+		const mem = await drizzleDb.query.memberships.findFirst({
+			where: and(eq(memberships.userId, userId), eq(memberships.orgId, orgId))
+		});
+		if (!mem || !['owner', 'admin'].includes(mem.role)) {
+			throw new Error('Unauthorized to update organization');
 		}
 
-		const org = mockOrgs.find((o) => o.id === orgId);
-		if (!org) return null;
+		const updateData: { name: string; slug?: string } = { name: name.trim() };
+		if (slug) updateData.slug = slug.trim();
 
-		const membership = mockMembers.find((m) => m.orgId === orgId && m.userId === userId);
-		if (!membership || (membership.role !== 'Owner' && membership.role !== 'Admin')) {
-			throw new Error('Insufficient permissions to update organization settings');
-		}
-
-		org.name = name.trim();
-		if (slug) {
-			org.slug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
-		}
-		saveWorkspace(workspace);
-		return org;
+		const [updated] = await drizzleDb
+			.update(organizations)
+			.set(updateData)
+			.where(eq(organizations.id, orgId))
+			.returning();
+		return updated || null;
 	},
 
-	async getUserSites(userId: string): Promise<Site[]> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const sites = await sql`
-						SELECT s.id, s.org_id as "orgId", s.domain, s.name, s.timezone, s.tracking_id as "trackingId", s.public, s.created_at as "createdAt"
-						FROM sites s
-						JOIN organizations o ON o.id = s.org_id
-						JOIN memberships m ON m.org_id = o.id
-						WHERE m.user_id = ${userId}::uuid
-						ORDER BY s.created_at DESC
-					`;
-					if (sites) return sites as Site[];
-				}
-			} catch (err) {
-				console.error('[db:getUserSites] PostgreSQL error:', err);
-			}
-		}
+	async getOrganizationMembers(orgId: string): Promise<(OrganizationMember & { name: string; email: string; avatarUrl?: string })[]> {
+		if (!isUuid(orgId)) return [];
+		const rows = await drizzleDb
+			.select({
+				id: memberships.id,
+				orgId: memberships.orgId,
+				userId: memberships.userId,
+				role: memberships.role,
+				joinedAt: memberships.createdAt,
+				name: users.name,
+				email: users.email,
+				avatarUrl: users.avatarUrl
+			})
+			.from(memberships)
+			.innerJoin(users, eq(users.id, memberships.userId))
+			.where(eq(memberships.orgId, orgId))
+			.orderBy(asc(memberships.createdAt));
 
-		const orgs = await this.getUserOrganizations(userId);
-		const orgIds = new Set(orgs.map((o) => o.id));
-		return mockSites.filter((s) => orgIds.has(s.orgId));
+		return rows.map((r) => ({
+			id: r.id,
+			orgId: r.orgId,
+			userId: r.userId,
+			role: formatRole(r.role),
+			joinedAt: r.joinedAt.toISOString(),
+			name: r.name,
+			email: r.email,
+			avatarUrl: r.avatarUrl || ''
+		}));
 	},
-
-	async createSiteForUser(userId: string, domain: string, name: string): Promise<Site> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const orgs = await this.getUserOrganizations(userId);
-					const primaryOrg = orgs[0];
-					if (!primaryOrg) throw new Error('Organization not found');
-
-					const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
-					const [site] = await sql`
-						INSERT INTO sites (org_id, domain, name, timezone, tracking_id, public)
-						VALUES (${primaryOrg.id}::uuid, ${domain.trim()}, ${name.trim() || domain.trim()}, 'UTC', ${trackingId}, false)
-						RETURNING id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-					`;
-					if (site) return site as Site;
-				}
-			} catch (err) {
-				console.error('[db:createSiteForUser] PostgreSQL error:', err);
-			}
-		}
-
-		const orgs = await this.getUserOrganizations(userId);
-		const primaryOrg = orgs[0];
-		const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
-
-		const site: Site = {
-			id: 'site_' + Math.random().toString(36).substring(2, 10),
-			orgId: primaryOrg.id,
-			domain,
-			name: name || domain,
-			timezone: 'UTC',
-			trackingId,
-			public: false,
-			createdAt: new Date().toISOString()
-		};
-
-		mockSites.push(site);
-		saveWorkspace(workspace);
-		return site;
-	},
-
-	async deleteSiteForUser(userId: string, siteId: string): Promise<boolean> {
-		if (sql) {
-			try {
-				if (isUuid(userId) && isUuid(siteId)) {
-					const res = await sql`
-						DELETE FROM sites s
-						USING memberships m
-						WHERE s.id = ${siteId}::uuid
-						  AND s.org_id = m.org_id
-						  AND m.user_id = ${userId}::uuid
-						RETURNING s.id
-					`;
-					if (res && res.length > 0) return true;
-				}
-			} catch (err) {
-				console.error('[db:deleteSiteForUser] PostgreSQL error:', err);
-			}
-		}
-
-		const userSites = await this.getUserSites(userId);
-		const allowed = userSites.some((s) => s.id === siteId);
-		if (!allowed) return false;
-
-		const idx = mockSites.findIndex((s) => s.id === siteId);
-		if (idx !== -1) {
-			mockSites.splice(idx, 1);
-			saveWorkspace(workspace);
-			return true;
-		}
-		return false;
-	},
-
-	// ── Team Members & Invitations ──
 
 	async getOrgMembers(orgId: string): Promise<(OrganizationMember & { name: string; email: string })[]> {
-		if (sql) {
-			try {
-				if (isUuid(orgId)) {
-					const members = await sql`
-						SELECT m.id, m.org_id as "orgId", m.user_id as "userId", m.role, m.created_at as "joinedAt", u.name, u.email
-						FROM memberships m
-						JOIN users u ON u.id = m.user_id
-						WHERE m.org_id = ${orgId}::uuid
-						ORDER BY m.created_at ASC
-					`;
-					if (members) {
-						return members.map((m: any) => ({
-							id: m.id,
-							orgId: m.orgId,
-							userId: m.userId,
-							role: formatRole(m.role),
-							joinedAt: m.joinedAt,
-							name: m.name,
-							email: m.email
-						}));
-					}
-				}
-			} catch (err) {
-				console.error('[db:getOrgMembers] PostgreSQL error:', err);
-			}
-		}
-
-		const members = mockMembers.filter((m) => m.orgId === orgId);
-		return members.map((m) => {
-			const u = mockUsers.find((user) => user.id === m.userId);
-			return {
-				...m,
-				name: u ? u.name : 'Unknown User',
-				email: u ? u.email : 'unknown@example.com'
-			};
-		});
-	},
-
-	async createOrgInvitation(
-		orgId: string,
-		inviterId: string,
-		email: string,
-		role: 'Admin' | 'Editor' | 'Viewer' = 'Viewer'
-	): Promise<Invitation> {
-		const token = 'inv_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-		const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
-		const pgRole = toPgRole(role);
-
-		if (sql) {
-			try {
-				if (isUuid(orgId) && isUuid(inviterId)) {
-					await sql`
-						DELETE FROM invitations
-						WHERE org_id = ${orgId}::uuid AND LOWER(email) = LOWER(${email.trim()}) AND status = 'pending'
-					`;
-
-					const [inv] = await sql`
-						INSERT INTO invitations (org_id, inviter_id, email, role, token, status, expires_at)
-						VALUES (${orgId}::uuid, ${inviterId}::uuid, ${email.trim().toLowerCase()}, ${pgRole}::user_role, ${token}, 'pending', ${expiresAt}::timestamptz)
-						RETURNING id, org_id as "orgId", inviter_id as "inviterId", email, role, token, status, created_at as "createdAt", expires_at as "expiresAt"
-					`;
-					if (inv) {
-						return {
-							...inv,
-							role: formatInviteRole(inv.role)
-						};
-					}
-				}
-			} catch (err) {
-				console.error('[db:createOrgInvitation] PostgreSQL error:', err);
-			}
-		}
-
-		const existingIdx = mockInvitations.findIndex((inv) => inv.orgId === orgId && inv.email.toLowerCase() === email.toLowerCase() && inv.status === 'pending');
-		if (existingIdx !== -1) {
-			mockInvitations.splice(existingIdx, 1);
-		}
-
-		const invitation: Invitation = {
-			id: 'inv_' + Math.random().toString(36).substring(2, 10),
-			orgId,
-			inviterId,
-			email: email.trim().toLowerCase(),
-			role,
-			token,
-			status: 'pending',
-			createdAt: new Date().toISOString(),
-			expiresAt
-		};
-
-		mockInvitations.push(invitation);
-		saveWorkspace(workspace);
-		return invitation;
-	},
-
-	async getOrgInvitations(orgId: string): Promise<Invitation[]> {
-		if (sql) {
-			try {
-				if (isUuid(orgId)) {
-					const invs = await sql`
-						SELECT id, org_id as "orgId", inviter_id as "inviterId", email, role, token, status, created_at as "createdAt", expires_at as "expiresAt"
-						FROM invitations
-						WHERE org_id = ${orgId}::uuid AND status = 'pending'
-						ORDER BY created_at DESC
-					`;
-					if (invs) {
-						return invs.map((i: any) => ({
-							...i,
-							role: formatInviteRole(i.role)
-						}));
-					}
-				}
-			} catch (err) {
-				console.error('[db:getOrgInvitations] PostgreSQL error:', err);
-			}
-		}
-
-		return mockInvitations.filter((inv) => inv.orgId === orgId && inv.status === 'pending');
-	},
-
-	async cancelOrgInvitation(orgId: string, inviteId: string): Promise<boolean> {
-		if (sql) {
-			try {
-				if (isUuid(inviteId)) {
-					const res = await sql`
-						DELETE FROM invitations
-						WHERE id = ${inviteId}::uuid
-						RETURNING id
-					`;
-					if (res && res.length > 0) return true;
-				}
-			} catch (err) {
-				console.error('[db:cancelOrgInvitation] PostgreSQL error:', err);
-			}
-		}
-
-		const idx = mockInvitations.findIndex((inv) => inv.id === inviteId && inv.orgId === orgId);
-		if (idx !== -1) {
-			mockInvitations[idx].status = 'cancelled';
-			mockInvitations.splice(idx, 1);
-			saveWorkspace(workspace);
-			return true;
-		}
-		return false;
+		return this.getOrganizationMembers(orgId);
 	},
 
 	async removeOrgMember(orgId: string, memberIdOrUserId: string): Promise<boolean> {
-		if (sql) {
-			try {
-				if (isUuid(orgId) && isUuid(memberIdOrUserId)) {
-					const [m] = await sql`
-						SELECT role FROM memberships
-						WHERE (id = ${memberIdOrUserId}::uuid OR user_id = ${memberIdOrUserId}::uuid) AND org_id = ${orgId}::uuid
-						LIMIT 1
-					`;
-					if (m && m.role === 'owner') return false;
-
-					const res = await sql`
-						DELETE FROM memberships
-						WHERE (id = ${memberIdOrUserId}::uuid OR user_id = ${memberIdOrUserId}::uuid) AND org_id = ${orgId}::uuid
-						RETURNING id
-					`;
-					if (res && res.length > 0) return true;
-				}
-			} catch (err) {
-				console.error('[db:removeOrgMember] PostgreSQL error:', err);
-			}
+		if (!isUuid(orgId) || !isUuid(memberIdOrUserId)) return false;
+		const mem = await drizzleDb.query.memberships.findFirst({
+			where: and(
+				eq(memberships.orgId, orgId),
+				or(eq(memberships.id, memberIdOrUserId), eq(memberships.userId, memberIdOrUserId))
+			)
+		});
+		if (!mem) return false;
+		if (mem.role === 'owner') {
+			throw new Error('Cannot remove the workspace Owner');
 		}
-
-		const idx = mockMembers.findIndex((m) => (m.id === memberIdOrUserId || m.userId === memberIdOrUserId) && m.orgId === orgId);
-		if (idx !== -1) {
-			if (mockMembers[idx].role === 'Owner') {
-				return false;
-			}
-			mockMembers.splice(idx, 1);
-			saveWorkspace(workspace);
-			return true;
-		}
-		return false;
+		const [deleted] = await drizzleDb
+			.delete(memberships)
+			.where(eq(memberships.id, mem.id))
+			.returning({ id: memberships.id });
+		return Boolean(deleted);
 	},
 
-	async getInvitationByToken(token: string): Promise<(Invitation & { orgName: string; inviterName: string }) | null> {
-		if (sql) {
-			try {
-				const rows = await sql`
-					SELECT i.id, i.org_id as "orgId", i.inviter_id as "inviterId", i.email, i.role, i.token, i.status, i.created_at as "createdAt", i.expires_at as "expiresAt",
-					       o.name as "orgName", u.name as "inviterName"
-					FROM invitations i
-					JOIN organizations o ON o.id = i.org_id
-					JOIN users u ON u.id = i.inviter_id
-					WHERE i.token = ${token} AND i.status = 'pending'
-					LIMIT 1
-				`;
-				if (rows && rows.length > 0) {
-					const r = rows[0];
-					return {
-						id: r.id,
-						orgId: r.orgId,
-						inviterId: r.inviterId,
-						email: r.email,
-						role: formatInviteRole(r.role),
-						token: r.token,
-						status: r.status,
-						createdAt: r.createdAt,
-						expiresAt: r.expiresAt,
-						orgName: r.orgName,
-						inviterName: r.inviterName
-					};
-				}
-			} catch (err) {
-				console.error('[db:getInvitationByToken] PostgreSQL error:', err);
-			}
-		}
+	// ── Invitations ──
 
-		const invite = mockInvitations.find((i) => i.token === token && i.status === 'pending');
-		if (!invite) return null;
+	async createOrgInvitation(orgId: string, inviterId: string, email: string, role: 'Admin' | 'Editor' | 'Viewer'): Promise<Invitation> {
+		if (!isUuid(orgId) || !isUuid(inviterId)) throw new Error('Invalid UUID');
+		const token = 'inv_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+		const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+		const pgRole = toPgRole(role);
 
-		const org = mockOrgs.find((o) => o.id === invite.orgId);
-		const inviter = mockUsers.find((u) => u.id === invite.inviterId);
+		await drizzleDb
+			.delete(invitations)
+			.where(
+				and(
+					eq(invitations.orgId, orgId),
+					eq(sql`LOWER(${invitations.email})`, email.trim().toLowerCase()),
+					eq(invitations.status, 'pending')
+				)
+			);
+
+		const [inv] = await drizzleDb
+			.insert(invitations)
+			.values({
+				orgId,
+				inviterId,
+				email: email.trim().toLowerCase(),
+				role: pgRole,
+				token,
+				status: 'pending',
+				expiresAt
+			})
+			.returning();
 
 		return {
-			...invite,
-			orgName: org ? org.name : 'Gravlytics Workspace',
-			inviterName: inviter ? inviter.name : 'Team Administrator'
+			id: inv.id,
+			orgId: inv.orgId,
+			inviterId: inv.inviterId,
+			email: inv.email,
+			role: formatInviteRole(inv.role),
+			token: inv.token,
+			status: inv.status as 'pending' | 'accepted' | 'cancelled',
+			createdAt: inv.createdAt.toISOString(),
+			expiresAt: inv.expiresAt.toISOString()
+		};
+	},
+
+	async getOrgInvitations(orgId: string): Promise<Invitation[]> {
+		if (!isUuid(orgId)) return [];
+		const rows = await drizzleDb.query.invitations.findMany({
+			where: and(eq(invitations.orgId, orgId), eq(invitations.status, 'pending')),
+			orderBy: [desc(invitations.createdAt)]
+		});
+		return rows.map((inv) => ({
+			id: inv.id,
+			orgId: inv.orgId,
+			inviterId: inv.inviterId,
+			email: inv.email,
+			role: formatInviteRole(inv.role),
+			token: inv.token,
+			status: inv.status as 'pending' | 'accepted' | 'cancelled',
+			createdAt: inv.createdAt.toISOString(),
+			expiresAt: inv.expiresAt.toISOString()
+		}));
+	},
+
+	async cancelOrgInvitation(orgId: string, inviteId: string): Promise<boolean> {
+		if (!isUuid(orgId) || !isUuid(inviteId)) return false;
+		const [deleted] = await drizzleDb
+			.delete(invitations)
+			.where(and(eq(invitations.id, inviteId), eq(invitations.orgId, orgId)))
+			.returning({ id: invitations.id });
+		return Boolean(deleted);
+	},
+
+	async getInvitationByToken(token: string): Promise<{ invitation: Invitation; organization: Organization; inviterName: string } | null> {
+		const rows = await drizzleDb
+			.select({
+				inv: invitations,
+				orgName: organizations.name,
+				orgSlug: organizations.slug,
+				inviterName: users.name
+			})
+			.from(invitations)
+			.innerJoin(organizations, eq(organizations.id, invitations.orgId))
+			.innerJoin(users, eq(users.id, invitations.inviterId))
+			.where(and(eq(invitations.token, token.trim()), eq(invitations.status, 'pending')))
+			.limit(1);
+
+		if (rows.length === 0) return null;
+		const r = rows[0];
+		return {
+			invitation: {
+				id: r.inv.id,
+				orgId: r.inv.orgId,
+				inviterId: r.inv.inviterId,
+				email: r.inv.email,
+				role: formatInviteRole(r.inv.role),
+				token: r.inv.token,
+				status: r.inv.status as 'pending' | 'accepted' | 'cancelled',
+				createdAt: r.inv.createdAt.toISOString(),
+				expiresAt: r.inv.expiresAt.toISOString()
+			},
+			organization: {
+				id: r.inv.orgId,
+				name: r.orgName,
+				slug: r.orgSlug
+			},
+			inviterName: r.inviterName
 		};
 	},
 
 	async acceptInvitation(token: string, userId: string): Promise<{ success: boolean; orgId?: string; error?: string }> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const [invite] = await sql`
-						SELECT id, org_id as "orgId", role, expires_at as "expiresAt", status
-						FROM invitations
-						WHERE token = ${token} AND status = 'pending'
-						LIMIT 1
-					`;
-					if (!invite) {
-						return { success: false, error: 'Invitation link is invalid or has already been used.' };
-					}
+		if (!isUuid(userId)) return { success: false, error: 'Invalid user ID' };
+		const inviteData = await this.getInvitationByToken(token);
+		if (!inviteData) return { success: false, error: 'Invitation not found or has expired' };
 
-					if (new Date(invite.expiresAt) < new Date()) {
-						return { success: false, error: 'This invitation has expired.' };
-					}
-
-					await sql`
-						INSERT INTO memberships (org_id, user_id, role)
-						VALUES (${invite.orgId}::uuid, ${userId}::uuid, ${invite.role}::user_role)
-						ON CONFLICT (user_id, org_id) DO NOTHING
-					`;
-
-					await sql`
-						UPDATE invitations
-						SET status = 'accepted'
-						WHERE id = ${invite.id}::uuid
-					`;
-
-					return { success: true, orgId: invite.orgId };
-				}
-			} catch (err: any) {
-				console.error('[db:acceptInvitation] PostgreSQL error:', err);
-			}
+		const { invitation, organization } = inviteData;
+		if (new Date(invitation.expiresAt).getTime() < Date.now()) {
+			return { success: false, error: 'Invitation has expired' };
 		}
 
-		const invite = mockInvitations.find((i) => i.token === token && i.status === 'pending');
-		if (!invite) {
-			return { success: false, error: 'Invitation link is invalid or has already been used.' };
+		const existing = await drizzleDb.query.memberships.findFirst({
+			where: and(eq(memberships.orgId, organization.id), eq(memberships.userId, userId))
+		});
+
+		if (existing) {
+			await drizzleDb.update(invitations).set({ status: 'accepted' }).where(eq(invitations.id, invitation.id));
+			return { success: true, orgId: organization.id };
 		}
 
-		if (new Date(invite.expiresAt) < new Date()) {
-			return { success: false, error: 'This invitation has expired.' };
-		}
-
-		const alreadyMember = mockMembers.some((m) => m.orgId === invite.orgId && m.userId === userId);
-		if (!alreadyMember) {
-			mockMembers.push({
-				id: 'mem_' + Math.random().toString(36).substring(2, 8),
-				orgId: invite.orgId,
-				userId,
-				role: invite.role,
-				joinedAt: new Date().toISOString().split('T')[0]
-			});
-		}
-
-		invite.status = 'accepted';
-		saveWorkspace(workspace);
-		return { success: true, orgId: invite.orgId };
+		await drizzleDb.insert(memberships).values({
+			userId,
+			orgId: organization.id,
+			role: toPgRole(invitation.role)
+		});
+		await drizzleDb.update(invitations).set({ status: 'accepted' }).where(eq(invitations.id, invitation.id));
+		return { success: true, orgId: organization.id };
 	},
 
-	// ── Sites (General) ──
+	async acceptOrgInvitation(token: string, userId: string): Promise<{ success: boolean; error?: string }> {
+		return this.acceptInvitation(token, userId);
+	},
+
+	// ── Sites ──
+
+	async getUserSites(userId: string): Promise<Site[]> {
+		if (!isUuid(userId)) return [];
+		const rows = await drizzleDb
+			.select({
+				id: sites.id,
+				orgId: sites.orgId,
+				domain: sites.domain,
+				name: sites.name,
+				timezone: sites.timezone,
+				trackingId: sites.trackingId,
+				public: sites.public,
+				sharePasswordHash: sites.sharePasswordHash,
+				createdAt: sites.createdAt
+			})
+			.from(sites)
+			.innerJoin(organizations, eq(organizations.id, sites.orgId))
+			.innerJoin(memberships, eq(memberships.orgId, organizations.id))
+			.where(eq(memberships.userId, userId))
+			.orderBy(desc(sites.createdAt));
+
+		return rows.map((s) => ({
+			id: s.id,
+			orgId: s.orgId,
+			domain: s.domain,
+			name: s.name,
+			timezone: s.timezone,
+			trackingId: s.trackingId,
+			public: s.public,
+			isPublic: s.public,
+			sharePasswordHash: s.sharePasswordHash,
+			createdAt: s.createdAt.toISOString()
+		}));
+	},
+
+	async createSiteForUser(userId: string, domain: string, name: string): Promise<Site> {
+		if (!isUuid(userId)) throw new Error('Invalid user ID');
+		const orgs = await this.getUserOrganizations(userId);
+		const primaryOrg = orgs[0];
+		if (!primaryOrg) throw new Error('Organization not found');
+
+		const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
+		const [site] = await drizzleDb
+			.insert(sites)
+			.values({
+				orgId: primaryOrg.id,
+				domain: domain.trim(),
+				name: name.trim() || domain.trim(),
+				timezone: 'UTC',
+				trackingId,
+				public: false
+			})
+			.returning();
+
+		return {
+			id: site.id,
+			orgId: site.orgId,
+			domain: site.domain,
+			name: site.name,
+			timezone: site.timezone,
+			trackingId: site.trackingId,
+			public: site.public,
+			createdAt: site.createdAt.toISOString()
+		};
+	},
+
+	async deleteSiteForUser(userId: string, siteId: string): Promise<boolean> {
+		if (!isUuid(userId) || !isUuid(siteId)) return false;
+		const site = await drizzleDb.query.sites.findFirst({
+			where: eq(sites.id, siteId)
+		});
+		if (!site) return false;
+
+		const isMember = await drizzleDb.query.memberships.findFirst({
+			where: and(eq(memberships.orgId, site.orgId), eq(memberships.userId, userId))
+		});
+		if (!isMember) return false;
+
+		const [deleted] = await drizzleDb
+			.delete(sites)
+			.where(eq(sites.id, siteId))
+			.returning({ id: sites.id });
+		return Boolean(deleted);
+	},
 
 	async getSites(orgId?: string): Promise<Site[]> {
-		if (sql) {
-			try {
-				if (orgId && isUuid(orgId)) {
-					const sites = await sql`
-						SELECT id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-						FROM sites
-						WHERE org_id = ${orgId}::uuid
-						ORDER BY created_at DESC
-					`;
-					if (sites) return sites as Site[];
-				} else {
-					const sites = await sql`
-						SELECT id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-						FROM sites
-						ORDER BY created_at DESC
-					`;
-					if (sites) return sites as Site[];
-				}
-			} catch (err) {
-				console.error('[db:getSites] PostgreSQL error:', err);
-			}
-		}
-
-		if (orgId) return mockSites.filter((s) => s.orgId === orgId);
-		return mockSites;
+		const query = orgId && isUuid(orgId)
+			? drizzleDb.select().from(sites).where(eq(sites.orgId, orgId)).orderBy(desc(sites.createdAt))
+			: drizzleDb.select().from(sites).orderBy(desc(sites.createdAt));
+		const rows = await query;
+		return rows.map((s) => ({
+			id: s.id,
+			orgId: s.orgId,
+			domain: s.domain,
+			name: s.name,
+			timezone: s.timezone,
+			trackingId: s.trackingId,
+			public: s.public,
+			createdAt: s.createdAt.toISOString()
+		}));
 	},
 
 	async getSiteByTrackingId(trackingId: string): Promise<Site | null> {
-		if (sql) {
-			try {
-				const rows = await sql`
-					SELECT id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-					FROM sites
-					WHERE tracking_id = ${trackingId}
-					LIMIT 1
-				`;
-				if (rows && rows.length > 0) return rows[0] as Site;
-			} catch (err) {
-				console.error('[db:getSiteByTrackingId] PostgreSQL error:', err);
-			}
-		}
-
-		return mockSites.find((s) => s.trackingId === trackingId) || null;
+		const site = await drizzleDb.query.sites.findFirst({
+			where: eq(sites.trackingId, trackingId.trim())
+		});
+		if (!site) return null;
+		return {
+			id: site.id,
+			orgId: site.orgId,
+			domain: site.domain,
+			name: site.name,
+			timezone: site.timezone,
+			trackingId: site.trackingId,
+			public: site.public,
+			createdAt: site.createdAt.toISOString()
+		};
 	},
 
 	async getSiteById(siteId: string): Promise<Site | null> {
-		if (sql) {
-			try {
-				const isSiteUuid = isUuid(siteId);
-				const rows = isSiteUuid
-					? await sql`
-						SELECT id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-						FROM sites
-						WHERE id = ${siteId}::uuid OR tracking_id = ${siteId}
-						LIMIT 1
-					`
-					: await sql`
-						SELECT id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-						FROM sites
-						WHERE tracking_id = ${siteId}
-						LIMIT 1
-					`;
-				if (rows && rows.length > 0) return rows[0] as Site;
-			} catch (err) {
-				console.error('[db:getSiteById] PostgreSQL error:', err);
+		if (!siteId) return null;
+		if (isUuid(siteId)) {
+			const site = await drizzleDb.query.sites.findFirst({
+				where: eq(sites.id, siteId)
+			});
+			if (site) {
+				return {
+					id: site.id,
+					orgId: site.orgId,
+					domain: site.domain,
+					name: site.name,
+					timezone: site.timezone,
+					trackingId: site.trackingId,
+					public: site.public,
+					createdAt: site.createdAt.toISOString()
+				};
 			}
 		}
-
-		return mockSites.find((s) => s.id === siteId || s.trackingId === siteId) || null;
+		return this.getSiteByTrackingId(siteId);
 	},
 
 	async createSite(domain: string, name: string, orgId?: string): Promise<Site> {
 		const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
-
-		if (sql) {
-			try {
-				let targetOrgId = orgId;
-				if (!targetOrgId || !isUuid(targetOrgId)) {
-					const [firstOrg] = await sql`SELECT id FROM organizations LIMIT 1`;
-					if (firstOrg) targetOrgId = firstOrg.id;
-				}
-
-				if (targetOrgId) {
-					const [site] = await sql`
-						INSERT INTO sites (org_id, domain, name, timezone, tracking_id, public)
-						VALUES (${targetOrgId}::uuid, ${domain.trim()}, ${name.trim() || domain.trim()}, 'UTC', ${trackingId}, false)
-						RETURNING id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-					`;
-					if (site) return site as Site;
-				}
-			} catch (err) {
-				console.error('[db:createSite] PostgreSQL error:', err);
-			}
+		let targetOrgId = orgId;
+		if (!targetOrgId || !isUuid(targetOrgId)) {
+			const firstOrg = await drizzleDb.query.organizations.findFirst();
+			if (!firstOrg) throw new Error('No organization exists');
+			targetOrgId = firstOrg.id;
 		}
 
-		const site: Site = {
-			id: 'site_' + Math.random().toString(36).substring(2, 10),
-			orgId: orgId || 'org-admin-1',
-			domain,
-			name: name || domain,
-			timezone: 'UTC',
-			trackingId,
-			public: false,
-			createdAt: new Date().toISOString()
+		const [site] = await drizzleDb
+			.insert(sites)
+			.values({
+				orgId: targetOrgId,
+				domain: domain.trim(),
+				name: name.trim() || domain.trim(),
+				timezone: 'UTC',
+				trackingId,
+				public: false
+			})
+			.returning();
+
+		return {
+			id: site.id,
+			orgId: site.orgId,
+			domain: site.domain,
+			name: site.name,
+			timezone: site.timezone,
+			trackingId: site.trackingId,
+			public: site.public,
+			createdAt: site.createdAt.toISOString()
 		};
-		mockSites.push(site);
-		saveWorkspace(workspace);
-		return site;
 	},
 
 	async deleteSite(siteId: string): Promise<boolean> {
-		if (sql) {
-			try {
-				if (isUuid(siteId)) {
-					const res = await sql`
-						DELETE FROM sites
-						WHERE id = ${siteId}::uuid
-						RETURNING id
-					`;
-					if (res && res.length > 0) return true;
-				}
-			} catch (err) {
-				console.error('[db:deleteSite] PostgreSQL error:', err);
-			}
-		}
-
-		const idx = mockSites.findIndex((s) => s.id === siteId);
-		if (idx !== -1) {
-			mockSites.splice(idx, 1);
-			saveWorkspace(workspace);
-			return true;
-		}
-		return false;
+		if (!isUuid(siteId)) return false;
+		const [deleted] = await drizzleDb
+			.delete(sites)
+			.where(eq(sites.id, siteId))
+			.returning({ id: sites.id });
+		return Boolean(deleted);
 	},
 
 	// ── API Keys ──
 
 	async getApiKeys(siteId: string): Promise<ApiKey[]> {
-		if (sql) {
-			try {
-				if (isUuid(siteId)) {
-					const keys = await sql`
-						SELECT id, site_id as "siteId", name, key_prefix as "prefix", scope, created_at as "createdAt", last_used_at as "lastUsedAt"
-						FROM api_keys
-						WHERE site_id = ${siteId}::uuid
-						ORDER BY created_at DESC
-					`;
-					if (keys) return keys as ApiKey[];
-				}
-			} catch (err) {
-				console.error('[db:getApiKeys] PostgreSQL error:', err);
-			}
-		}
-
-		return mockApiKeys.filter((k) => k.siteId === siteId);
+		if (!isUuid(siteId)) return [];
+		const rows = await drizzleDb.query.apiKeys.findMany({
+			where: eq(apiKeys.siteId, siteId),
+			orderBy: [desc(apiKeys.createdAt)]
+		});
+		return rows.map((k) => ({
+			id: k.id,
+			siteId: k.siteId,
+			name: k.name,
+			prefix: k.keyPrefix,
+			scope: k.scope,
+			createdAt: k.createdAt.toISOString(),
+			lastUsedAt: k.lastUsedAt?.toISOString()
+		}));
 	},
 
 	async createApiKey(siteId: string, name: string, prefix: string, scope = 'all'): Promise<ApiKey> {
-		if (sql) {
-			try {
-				if (isUuid(siteId)) {
-					const pgScope = (scope || 'all').toLowerCase();
-					const [key] = await sql`
-						INSERT INTO api_keys (site_id, name, key_hash, key_prefix, scope)
-						VALUES (${siteId}::uuid, ${name.trim()}, ${prefix}, ${prefix}, ${pgScope}::api_key_scope)
-						RETURNING id, site_id as "siteId", name, key_prefix as "prefix", scope, created_at as "createdAt", last_used_at as "lastUsedAt"
-					`;
-					if (key) return key as ApiKey;
-				}
-			} catch (err) {
-				console.error('[db:createApiKey] PostgreSQL error:', err);
-			}
-		}
-
-		const key: ApiKey = {
-			id: 'key_' + Math.random().toString(36).substring(2, 10),
-			siteId,
-			name,
-			prefix,
-			scope,
-			createdAt: new Date().toISOString()
+		if (!isUuid(siteId)) throw new Error('Invalid site ID');
+		const pgScope = (scope || 'all').toLowerCase() as 'ingestion' | 'query' | 'all';
+		const [key] = await drizzleDb
+			.insert(apiKeys)
+			.values({
+				siteId,
+				name: name.trim(),
+				keyHash: prefix,
+				keyPrefix: prefix,
+				scope: pgScope
+			})
+			.returning();
+		return {
+			id: key.id,
+			siteId: key.siteId,
+			name: key.name,
+			prefix: key.keyPrefix,
+			scope: key.scope,
+			createdAt: key.createdAt.toISOString(),
+			lastUsedAt: key.lastUsedAt?.toISOString()
 		};
-		mockApiKeys.push(key);
-		saveWorkspace(workspace);
-		return key;
 	},
 
 	async revokeApiKey(keyId: string): Promise<boolean> {
-		if (sql) {
-			try {
-				if (isUuid(keyId)) {
-					const res = await sql`
-						DELETE FROM api_keys
-						WHERE id = ${keyId}::uuid
-						RETURNING id
-					`;
-					if (res && res.length > 0) return true;
-				}
-			} catch (err) {
-				console.error('[db:revokeApiKey] PostgreSQL error:', err);
-			}
-		}
-
-		const idx = mockApiKeys.findIndex((k) => k.id === keyId);
-		if (idx !== -1) {
-			mockApiKeys.splice(idx, 1);
-			saveWorkspace(workspace);
-			return true;
-		}
-		return false;
+		if (!isUuid(keyId)) return false;
+		const [deleted] = await drizzleDb
+			.delete(apiKeys)
+			.where(eq(apiKeys.id, keyId))
+			.returning({ id: apiKeys.id });
+		return Boolean(deleted);
 	},
 
 	async getApiKeysForUser(userId: string): Promise<(ApiKey & { siteDomain?: string; siteName?: string })[]> {
-		if (sql) {
-			try {
-				if (isUuid(userId)) {
-					const keys = await sql`
-						SELECT k.id, k.site_id as "siteId", k.name, k.key_prefix as "prefix", k.scope, k.created_at as "createdAt", k.last_used_at as "lastUsedAt",
-						       s.domain as "siteDomain", s.name as "siteName"
-						FROM api_keys k
-						JOIN sites s ON s.id = k.site_id
-						JOIN memberships m ON m.org_id = s.org_id
-						WHERE m.user_id = ${userId}::uuid
-						ORDER BY k.created_at DESC
-					`;
-					if (keys) return keys as any;
-				}
-			} catch (err) {
-				console.error('[db:getApiKeysForUser] PostgreSQL error:', err);
-			}
-		}
+		if (!isUuid(userId)) return [];
+		const rows = await drizzleDb
+			.select({
+				id: apiKeys.id,
+				siteId: apiKeys.siteId,
+				name: apiKeys.name,
+				prefix: apiKeys.keyPrefix,
+				scope: apiKeys.scope,
+				createdAt: apiKeys.createdAt,
+				lastUsedAt: apiKeys.lastUsedAt,
+				siteDomain: sites.domain,
+				siteName: sites.name
+			})
+			.from(apiKeys)
+			.innerJoin(sites, eq(sites.id, apiKeys.siteId))
+			.innerJoin(memberships, eq(memberships.orgId, sites.orgId))
+			.where(eq(memberships.userId, userId))
+			.orderBy(desc(apiKeys.createdAt));
 
-		const userSites = await this.getUserSites(userId);
-		const siteIds = new Set(userSites.map((s) => s.id));
-		const siteTrackingIds = new Set(userSites.map((s) => s.trackingId));
-
-		const keys = mockApiKeys.filter((k) => siteIds.has(k.siteId) || siteTrackingIds.has(k.siteId));
-		return keys.map((k) => {
-			const site = userSites.find((s) => s.id === k.siteId || s.trackingId === k.siteId);
-			return {
-				...k,
-				siteDomain: site ? site.domain : undefined,
-				siteName: site ? site.name : undefined
-			};
-		});
+		return rows.map((k) => ({
+			id: k.id,
+			siteId: k.siteId,
+			name: k.name,
+			prefix: k.prefix,
+			scope: k.scope,
+			createdAt: k.createdAt.toISOString(),
+			lastUsedAt: k.lastUsedAt?.toISOString(),
+			siteDomain: k.siteDomain,
+			siteName: k.siteName
+		}));
 	},
 
 	async createApiKeyForUser(
@@ -1298,48 +794,29 @@ export const db = {
 		const prefix = 'gly_' + Math.random().toString(36).substring(2, 6);
 		const secret = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 		const rawKey = `${prefix}_${secret}`;
-		const pgScope = (scope || 'all').toLowerCase();
+		const pgScope = (scope || 'all').toLowerCase() as 'ingestion' | 'query' | 'all';
+		const keyHash = hashPassword(rawKey);
 
-		if (sql) {
-			try {
-				if (isUuid(userId) && isUuid(targetSite.id)) {
-					const [key] = await sql`
-						INSERT INTO api_keys (site_id, name, key_hash, key_prefix, scope)
-						VALUES (${targetSite.id}::uuid, ${name.trim() || 'API Key'}, ${rawKey}, ${prefix}, ${pgScope}::api_key_scope)
-						RETURNING id, site_id as "siteId", name, key_prefix as "prefix", scope, created_at as "createdAt", last_used_at as "lastUsedAt"
-					`;
-					if (key) {
-						return {
-							apiKey: {
-								...key,
-								siteDomain: targetSite.domain,
-								siteName: targetSite.name
-							},
-							rawKey
-						};
-					}
-				}
-			} catch (err) {
-				console.error('[db:createApiKeyForUser] PostgreSQL error, falling back:', err);
-			}
-		}
-
-		const key: ApiKey = {
-			id: 'key_' + Math.random().toString(36).substring(2, 10),
-			siteId: targetSite.id,
-			name: name.trim() || 'API Key',
-			prefix,
-			scope,
-			createdAt: new Date().toISOString(),
-			lastUsedAt: undefined
-		};
-
-		mockApiKeys.push(key);
-		saveWorkspace(workspace);
+		const [key] = await drizzleDb
+			.insert(apiKeys)
+			.values({
+				siteId: targetSite.id,
+				name: name.trim() || 'API Key',
+				keyHash,
+				keyPrefix: prefix,
+				scope: pgScope
+			})
+			.returning();
 
 		return {
 			apiKey: {
-				...key,
+				id: key.id,
+				siteId: key.siteId,
+				name: key.name,
+				prefix: key.keyPrefix,
+				scope: key.scope,
+				createdAt: key.createdAt.toISOString(),
+				lastUsedAt: key.lastUsedAt?.toISOString(),
 				siteDomain: targetSite.domain,
 				siteName: targetSite.name
 			},
@@ -1348,36 +825,25 @@ export const db = {
 	},
 
 	async revokeApiKeyForUser(userId: string, keyId: string): Promise<boolean> {
-		if (sql) {
-			try {
-				if (isUuid(userId) && isUuid(keyId)) {
-					const res = await sql`
-						DELETE FROM api_keys k
-						USING sites s, memberships m
-						WHERE k.id = ${keyId}::uuid
-						  AND k.site_id = s.id
-						  AND s.org_id = m.org_id
-						  AND m.user_id = ${userId}::uuid
-						RETURNING k.id
-					`;
-					if (res && res.length > 0) return true;
-				}
-			} catch (err) {
-				console.error('[db:revokeApiKeyForUser] PostgreSQL error:', err);
+		if (!isUuid(userId) || !isUuid(keyId)) return false;
+		const key = await drizzleDb.query.apiKeys.findFirst({
+			where: eq(apiKeys.id, keyId),
+			with: {
+				site: true
 			}
-		}
+		});
+		if (!key || !key.site) return false;
 
-		const userSites = await this.getUserSites(userId);
-		const siteIds = new Set(userSites.map((s) => s.id));
-		const siteTrackingIds = new Set(userSites.map((s) => s.trackingId));
+		const isMember = await drizzleDb.query.memberships.findFirst({
+			where: and(eq(memberships.orgId, key.site.orgId), eq(memberships.userId, userId))
+		});
+		if (!isMember) return false;
 
-		const idx = mockApiKeys.findIndex((k) => k.id === keyId && (siteIds.has(k.siteId) || siteTrackingIds.has(k.siteId)));
-		if (idx !== -1) {
-			mockApiKeys.splice(idx, 1);
-			saveWorkspace(workspace);
-			return true;
-		}
-		return false;
+		const [deleted] = await drizzleDb
+			.delete(apiKeys)
+			.where(eq(apiKeys.id, keyId))
+			.returning({ id: apiKeys.id });
+		return Boolean(deleted);
 	},
 
 	async validateApiKey(rawKey: string): Promise<{ apiKey: ApiKey; site: Site } | null> {
@@ -1385,92 +851,62 @@ export const db = {
 		const cleanKey = rawKey.trim().replace(/^Bearer\s+/i, '');
 		if (!cleanKey) return null;
 
-		if (sql) {
-			try {
-				const prefixPart = cleanKey.length >= 8 ? cleanKey.substring(0, 8) : cleanKey;
-				const rows = await sql`
-					SELECT k.id, k.site_id as "siteId", k.name, k.key_prefix as "prefix", k.scope, k.created_at as "createdAt", k.last_used_at as "lastUsedAt",
-					       s.id as "s_id", s.org_id as "s_orgId", s.domain as "s_domain", s.name as "s_name", s.timezone as "s_timezone", s.tracking_id as "s_trackingId", s.public as "s_public", s.created_at as "s_createdAt"
-					FROM api_keys k
-					JOIN sites s ON s.id = k.site_id
-					WHERE (k.key_prefix = ${prefixPart} OR ${cleanKey} LIKE k.key_prefix || '%' OR k.key_hash = ${cleanKey})
-					LIMIT 1
-				`;
-				if (rows && rows.length > 0) {
-					const r = rows[0];
-					sql`UPDATE api_keys SET last_used_at = NOW() WHERE id = ${r.id}::uuid`.catch(() => {});
+		const prefixPart = cleanKey.length >= 8 ? cleanKey.substring(0, 8) : cleanKey;
+		const keys = await drizzleDb
+			.select({
+				key: apiKeys,
+				site: sites
+			})
+			.from(apiKeys)
+			.innerJoin(sites, eq(sites.id, apiKeys.siteId))
+			.where(eq(apiKeys.keyPrefix, prefixPart));
+
+		if (keys.length > 0) {
+			for (const { key, site } of keys) {
+				if (key.keyHash === cleanKey || verifyPassword(cleanKey, key.keyHash)) {
+					drizzleDb
+						.update(apiKeys)
+						.set({ lastUsedAt: new Date() })
+						.where(eq(apiKeys.id, key.id))
+						.catch(() => {});
 					return {
 						apiKey: {
-							id: r.id,
-							siteId: r.siteId,
-							name: r.name,
-							prefix: r.prefix,
-							scope: r.scope,
-							createdAt: r.createdAt,
-							lastUsedAt: r.lastUsedAt
+							id: key.id,
+							siteId: key.siteId,
+							name: key.name,
+							prefix: key.keyPrefix,
+							scope: key.scope,
+							createdAt: key.createdAt.toISOString(),
+							lastUsedAt: key.lastUsedAt?.toISOString()
 						},
 						site: {
-							id: r.s_id,
-							orgId: r.s_orgId,
-							domain: r.s_domain,
-							name: r.s_name,
-							timezone: r.s_timezone,
-							trackingId: r.s_trackingId,
-							public: r.s_public,
-							createdAt: r.s_createdAt
+							id: site.id,
+							orgId: site.orgId,
+							domain: site.domain,
+							name: site.name,
+							timezone: site.timezone,
+							trackingId: site.trackingId,
+							public: site.public,
+							createdAt: site.createdAt.toISOString()
 						}
 					};
 				}
-
-				// Fallback: check if cleanKey matches site trackingId
-				const siteRows = await sql`
-					SELECT id, org_id as "orgId", domain, name, timezone, tracking_id as "trackingId", public, created_at as "createdAt"
-					FROM sites
-					WHERE tracking_id = ${cleanKey}
-					LIMIT 1
-				`;
-				if (siteRows && siteRows.length > 0) {
-					const s = siteRows[0] as Site;
-					return {
-						apiKey: {
-							id: 'key-tracking-' + s.trackingId,
-							siteId: s.id,
-							name: 'Site Tracking Key',
-							prefix: s.trackingId,
-							scope: 'all',
-							createdAt: new Date().toISOString()
-						},
-						site: s
-					};
-				}
-			} catch (err) {
-				console.error('[db:validateApiKey] PostgreSQL error:', err);
 			}
 		}
 
-		const key = mockApiKeys.find(
-			(k) => cleanKey === k.id || cleanKey.startsWith(k.prefix) || cleanKey === k.prefix
-		);
-		if (key) {
-			const site = (await db.getSiteById(key.siteId)) || mockSites.find((s) => s.id === key.siteId);
-			if (site) return { apiKey: key, site };
-		}
-
-		// Demo key or tracking ID fallback
-		const demoSite = mockSites.find(
-			(s) => s.trackingId === cleanKey || cleanKey.includes(s.trackingId) || cleanKey === 'demo-api-key' || cleanKey === 'gravlytics_demo_key'
-		);
-		if (demoSite) {
+		// Fallback: check if cleanKey matches site trackingId directly
+		const site = await this.getSiteByTrackingId(cleanKey);
+		if (site) {
 			return {
 				apiKey: {
-					id: 'key-demo-default',
-					siteId: demoSite.id,
-					name: 'Demo External Key',
-					prefix: demoSite.trackingId,
+					id: 'key-tracking-' + site.id,
+					siteId: site.id,
+					name: 'Site Tracking Key',
+					prefix: site.trackingId,
 					scope: 'all',
-					createdAt: new Date().toISOString()
+					createdAt: site.createdAt
 				},
-				site: demoSite
+				site
 			};
 		}
 
@@ -1479,30 +915,353 @@ export const db = {
 
 	// ── Goals ──
 
-	async getGoals(siteId: string): Promise<Goal[]> {
-		const site = await db.getSiteByTrackingId(siteId);
-		return mockGoals.filter((g) => g.siteId === siteId || (site && g.siteId === site.id) || (site && g.siteId === site.trackingId));
+	async getGoals(siteIdOrTrackingId: string): Promise<Goal[]> {
+		let site = isUuid(siteIdOrTrackingId)
+			? await this.getSiteById(siteIdOrTrackingId)
+			: await this.getSiteByTrackingId(siteIdOrTrackingId);
+		const targetSiteId = site?.id || siteIdOrTrackingId;
+		if (!isUuid(targetSiteId)) return [];
+
+		const rows = await drizzleDb.query.goals.findMany({
+			where: eq(goals.siteId, targetSiteId),
+			orderBy: [desc(goals.createdAt)]
+		});
+
+		return rows.map((g) => ({
+			id: g.id,
+			siteId: g.siteId,
+			name: g.name,
+			eventName: g.eventName || undefined,
+			pagePath: g.pagePath || undefined,
+			createdAt: g.createdAt.toISOString()
+		}));
 	},
 
-	async createGoal(siteId: string, name: string, eventName?: string, pagePath?: string): Promise<Goal> {
-		const goal: Goal = {
-			id: 'goal_' + Math.random().toString(36).substring(2, 10),
-			siteId,
-			name,
-			eventName,
-			pagePath,
-			createdAt: new Date().toISOString()
+	async createGoal(siteIdOrTrackingId: string, name: string, eventName?: string, pagePath?: string): Promise<Goal> {
+		let site = isUuid(siteIdOrTrackingId)
+			? await this.getSiteById(siteIdOrTrackingId)
+			: await this.getSiteByTrackingId(siteIdOrTrackingId);
+		const targetSiteId = site?.id || siteIdOrTrackingId;
+		if (!isUuid(targetSiteId)) throw new Error('Invalid site ID');
+
+		const [goal] = await drizzleDb
+			.insert(goals)
+			.values({
+				siteId: targetSiteId,
+				name: name.trim(),
+				eventName: eventName || null,
+				pagePath: pagePath || null
+			})
+			.returning();
+
+		return {
+			id: goal.id,
+			siteId: goal.siteId,
+			name: goal.name,
+			eventName: goal.eventName || undefined,
+			pagePath: goal.pagePath || undefined,
+			createdAt: goal.createdAt.toISOString()
 		};
-		mockGoals.push(goal);
-		return goal;
 	},
 
-	async deleteGoal(goalId: string): Promise<boolean> {
-		const idx = mockGoals.findIndex((g) => g.id === goalId);
-		if (idx !== -1) {
-			mockGoals.splice(idx, 1);
-			return true;
+	async deleteGoal(id: string): Promise<boolean> {
+		if (!isUuid(id)) return false;
+		const [deleted] = await drizzleDb
+			.delete(goals)
+			.where(eq(goals.id, id))
+			.returning({ id: goals.id });
+		return Boolean(deleted);
+	},
+
+	// ── Site Public Sharing ──
+
+	async updateSiteSharing(siteId: string, isPublic: boolean, password?: string): Promise<{ success: boolean; isPublic: boolean; hasPassword: boolean }> {
+		if (!isUuid(siteId)) return { success: false, isPublic: false, hasPassword: false };
+		const updateData: { public: boolean; sharePasswordHash?: string | null } = {
+			public: isPublic
+		};
+		if (password !== undefined) {
+			updateData.sharePasswordHash = password.trim() ? hashPassword(password.trim()) : null;
 		}
-		return false;
+
+		const [updated] = await drizzleDb
+			.update(sites)
+			.set(updateData)
+			.where(eq(sites.id, siteId))
+			.returning();
+
+		if (!updated) return { success: false, isPublic: false, hasPassword: false };
+		return {
+			success: true,
+			isPublic: updated.public,
+			hasPassword: Boolean(updated.sharePasswordHash)
+		};
+	},
+
+	async getSiteByTrackingIdForShare(trackingId: string): Promise<{ site: Site; hasPassword: boolean } | null> {
+		const site = await drizzleDb.query.sites.findFirst({
+			where: eq(sites.trackingId, trackingId.trim())
+		});
+		if (!site || !site.public) return null;
+		return {
+			site: {
+				id: site.id,
+				orgId: site.orgId,
+				domain: site.domain,
+				name: site.name,
+				timezone: site.timezone,
+				trackingId: site.trackingId,
+				public: site.public,
+				createdAt: site.createdAt.toISOString()
+			},
+			hasPassword: Boolean(site.sharePasswordHash)
+		};
+	},
+
+	async verifySharePassword(trackingId: string, password: string): Promise<boolean> {
+		const site = await drizzleDb.query.sites.findFirst({
+			where: eq(sites.trackingId, trackingId.trim())
+		});
+		if (!site || !site.public) return false;
+		if (!site.sharePasswordHash) return true;
+		return verifyPassword(password, site.sharePasswordHash);
+	},
+
+	// ── Saved Reports ──
+
+	async getSavedReports(userId: string, siteId?: string): Promise<any[]> {
+		if (!isUuid(userId)) return [];
+		const conditions = [eq(savedReports.userId, userId)];
+		if (siteId && isUuid(siteId)) {
+			conditions.push(eq(savedReports.siteId, siteId));
+		}
+		const rows = await drizzleDb.query.savedReports.findMany({
+			where: and(...conditions),
+			orderBy: [desc(savedReports.createdAt)]
+		});
+		return rows.map((r) => ({
+			id: r.id,
+			siteId: r.siteId,
+			name: r.name,
+			filters: r.filters,
+			createdAt: r.createdAt.toISOString(),
+			updatedAt: r.updatedAt.toISOString()
+		}));
+	},
+
+	async createSavedReport(userId: string, siteId: string, name: string, filters: Record<string, any>): Promise<any> {
+		if (!isUuid(userId) || !isUuid(siteId)) throw new Error('Invalid user or site ID');
+		const [report] = await drizzleDb
+			.insert(savedReports)
+			.values({
+				userId,
+				siteId,
+				name: name.trim() || 'Untitled Report',
+				filters
+			})
+			.returning();
+		return {
+			id: report.id,
+			siteId: report.siteId,
+			name: report.name,
+			filters: report.filters,
+			createdAt: report.createdAt.toISOString(),
+			updatedAt: report.updatedAt.toISOString()
+		};
+	},
+
+	async deleteSavedReport(userId: string, reportId: string): Promise<boolean> {
+		if (!isUuid(userId) || !isUuid(reportId)) return false;
+		const [deleted] = await drizzleDb
+			.delete(savedReports)
+			.where(and(eq(savedReports.id, reportId), eq(savedReports.userId, userId)))
+			.returning({ id: savedReports.id });
+		return Boolean(deleted);
+	},
+
+	// ── Alerts ──
+
+	async getAlerts(siteId: string): Promise<any[]> {
+		if (!isUuid(siteId)) return [];
+		const rows = await drizzleDb.query.alerts.findMany({
+			where: eq(alerts.siteId, siteId),
+			orderBy: [desc(alerts.createdAt)]
+		});
+		return rows.map((a) => ({
+			id: a.id,
+			siteId: a.siteId,
+			name: a.name,
+			metric: a.metric,
+			condition: a.condition,
+			threshold: a.threshold,
+			windowMinutes: a.windowMinutes,
+			webhookUrl: a.webhookUrl,
+			enabled: a.enabled,
+			lastTriggeredAt: a.lastTriggeredAt?.toISOString() || null,
+			createdAt: a.createdAt.toISOString()
+		}));
+	},
+
+	async createAlert(siteId: string, data: { name: string; metric: string; condition: string; threshold: number; windowMinutes: number; webhookUrl: string }): Promise<any> {
+		if (!isUuid(siteId)) throw new Error('Invalid site ID');
+		const [alert] = await drizzleDb
+			.insert(alerts)
+			.values({
+				siteId,
+				name: data.name.trim(),
+				metric: data.metric,
+				condition: data.condition,
+				threshold: Number(data.threshold),
+				windowMinutes: Number(data.windowMinutes || 60),
+				webhookUrl: data.webhookUrl.trim(),
+				enabled: true
+			})
+			.returning();
+		return {
+			id: alert.id,
+			siteId: alert.siteId,
+			name: alert.name,
+			metric: alert.metric,
+			condition: alert.condition,
+			threshold: alert.threshold,
+			windowMinutes: alert.windowMinutes,
+			webhookUrl: alert.webhookUrl,
+			enabled: alert.enabled,
+			createdAt: alert.createdAt.toISOString()
+		};
+	},
+
+	async toggleAlert(alertId: string, enabled: boolean): Promise<boolean> {
+		if (!isUuid(alertId)) return false;
+		const [updated] = await drizzleDb
+			.update(alerts)
+			.set({ enabled })
+			.where(eq(alerts.id, alertId))
+			.returning();
+		return Boolean(updated);
+	},
+
+	async deleteAlert(alertId: string): Promise<boolean> {
+		if (!isUuid(alertId)) return false;
+		const [deleted] = await drizzleDb
+			.delete(alerts)
+			.where(eq(alerts.id, alertId))
+			.returning({ id: alerts.id });
+		return Boolean(deleted);
+	},
+
+	// ── Audit Logs ──
+
+	async logAuditEvent(orgId: string, userId: string | null, action: string, details: Record<string, any> = {}): Promise<void> {
+		if (!isUuid(orgId)) return;
+		try {
+			await drizzleDb.insert(auditLogs).values({
+				orgId,
+				userId: userId && isUuid(userId) ? userId : null,
+				action: action.trim(),
+				details
+			});
+		} catch (err) {
+			console.error('[audit] Failed to log audit event:', err);
+		}
+	},
+
+	async getAuditLogs(orgId: string, limit = 50): Promise<any[]> {
+		if (!isUuid(orgId)) return [];
+		const rows = await drizzleDb
+			.select({
+				id: auditLogs.id,
+				action: auditLogs.action,
+				details: auditLogs.details,
+				createdAt: auditLogs.createdAt,
+				userName: users.name,
+				userEmail: users.email
+			})
+			.from(auditLogs)
+			.leftJoin(users, eq(users.id, auditLogs.userId))
+			.where(eq(auditLogs.orgId, orgId))
+			.orderBy(desc(auditLogs.createdAt))
+			.limit(limit);
+
+		return rows.map((r) => ({
+			id: r.id,
+			action: r.action,
+			details: r.details,
+			createdAt: r.createdAt.toISOString(),
+			user: r.userName ? { name: r.userName, email: r.userEmail } : null
+		}));
+	},
+
+	// ── Site Annotations ──
+
+	async getSiteAnnotations(siteId: string, from?: string, to?: string): Promise<any[]> {
+		if (!isUuid(siteId)) return [];
+		const conditions = [eq(siteAnnotations.siteId, siteId)];
+		if (from) conditions.push(sql`${siteAnnotations.date} >= ${from}`);
+		if (to) conditions.push(sql`${siteAnnotations.date} <= ${to}`);
+
+		const rows = await drizzleDb.query.siteAnnotations.findMany({
+			where: and(...conditions),
+			orderBy: [desc(siteAnnotations.date), desc(siteAnnotations.createdAt)]
+		});
+
+		return rows.map((a) => ({
+			id: a.id,
+			siteId: a.siteId,
+			date: a.date,
+			title: a.title,
+			description: a.description || '',
+			category: a.category,
+			color: a.color,
+			createdAt: a.createdAt.toISOString()
+		}));
+	},
+
+	async createSiteAnnotation(
+		siteId: string,
+		data: { date: string; title: string; description?: string; category?: string; color?: string }
+	): Promise<any> {
+		if (!isUuid(siteId)) throw new Error('Invalid site ID');
+		const [created] = await drizzleDb
+			.insert(siteAnnotations)
+			.values({
+				siteId,
+				date: data.date.trim(),
+				title: data.title.trim(),
+				description: data.description?.trim() || '',
+				category: data.category?.trim() || 'release',
+				color: data.color?.trim() || 'indigo'
+			})
+			.returning();
+
+		return {
+			id: created.id,
+			siteId: created.siteId,
+			date: created.date,
+			title: created.title,
+			description: created.description || '',
+			category: created.category,
+			color: created.color,
+			createdAt: created.createdAt.toISOString()
+		};
+	},
+
+	async deleteSiteAnnotation(annotationId: string): Promise<boolean> {
+		if (!isUuid(annotationId)) return false;
+		const [deleted] = await drizzleDb
+			.delete(siteAnnotations)
+			.where(eq(siteAnnotations.id, annotationId))
+			.returning({ id: siteAnnotations.id });
+		return Boolean(deleted);
+	},
+
+	// ── Multi-Domain Portfolio Rollup ──
+
+	async getPortfolioSites(userId: string): Promise<any[]> {
+		if (!isUuid(userId)) return [];
+		const orgs = await this.getUserOrganizations(userId);
+		if (orgs.length === 0) return [];
+		const sitesList = await this.getUserSites(userId);
+		return sitesList;
 	}
 };

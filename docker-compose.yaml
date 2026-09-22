@@ -1,0 +1,4 @@
+# Gravlytics Root Compose
+# Includes the infrastructure services from infra/docker-compose.yaml
+include:
+  - infra/docker-compose.yaml

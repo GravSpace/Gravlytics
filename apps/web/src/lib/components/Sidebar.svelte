@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { FORMATTED_VERSION } from '$lib/version';
 	import {
 		LayoutDashboard,
 		Activity,
@@ -18,7 +19,10 @@
 		Zap,
 		BookOpen,
 		Gauge,
-		Megaphone
+		Megaphone,
+		FileBarChart,
+		Route,
+		Network
 	} from '@lucide/svelte';
 
 	let { collapsed = $bindable(false) }: { collapsed: boolean } = $props();
@@ -26,17 +30,20 @@
 	const navItems = [
 		{ label: 'Overview', href: '/', icon: LayoutDashboard },
 		{ label: 'Realtime', href: '/realtime', icon: Activity, badge: 'Live' },
+		{ label: 'Network Rollup', href: '/network', icon: Network },
 		{ label: 'Sessions', href: '/sessions', icon: Timer },
 		{ label: 'Pages & Paths', href: '/pages', icon: FileText },
 		{ label: 'Events', href: '/events', icon: Zap },
+		{ label: 'User Journeys', href: '/journeys', icon: Route },
+		{ label: 'Campaigns & UTM', href: '/campaigns', icon: Megaphone },
 		{ label: 'Web Vitals', href: '/vitals', icon: Gauge },
-		{ label: 'Ads & Viewability', href: '/ads', icon: Megaphone },
 		{ label: 'Acquisition', href: '/sources', icon: Compass },
 		{ label: 'Locations', href: '/locations', icon: Globe },
 		{ label: 'Devices', href: '/devices', icon: MonitorSmartphone },
 		{ label: 'Goals', href: '/goals', icon: Target },
 		{ label: 'Funnels', href: '/funnels', icon: Filter },
 		{ label: 'Retention', href: '/retention', icon: Repeat },
+		{ label: 'Custom Reports', href: '/reports', icon: FileBarChart },
 		{ label: 'Documentation', href: '/docs', icon: BookOpen },
 		{ label: 'Settings', href: '/settings', icon: Settings }
 	];
@@ -63,7 +70,7 @@
 			{#if !collapsed}
 				<div class="flex items-center gap-1.5 min-w-0">
 					<span class="text-sm font-semibold tracking-tight text-heading">Gravlytics</span>
-					<span class="badge-tag rounded px-1 py-0.5 text-[9px] font-mono font-medium">v1.0</span>
+					<span class="badge-tag rounded px-1 py-0.5 text-[9px] font-mono font-medium">{FORMATTED_VERSION}</span>
 				</div>
 			{/if}
 		</a>

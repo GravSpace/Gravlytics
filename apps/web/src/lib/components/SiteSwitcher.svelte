@@ -106,8 +106,20 @@
 						</button>
 					{/each}
 				{:else}
-					<div class="py-6 text-center text-xs text-label">
-						No sites matching "{searchQuery}"
+					<div class="py-6 text-center text-xs text-label flex flex-col items-center gap-2">
+						{#if siteStore.sites.length === 0}
+							<span>No websites added yet.</span>
+							<a
+								href="/settings/sites"
+								onclick={() => (isOpen = false)}
+								class="inline-flex items-center gap-1 rounded bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-indigo-500 transition-colors"
+							>
+								<Plus size={11} />
+								<span>Add Website</span>
+							</a>
+						{:else}
+							<span>No sites matching "{searchQuery}"</span>
+						{/if}
 					</div>
 				{/if}
 			</div>
