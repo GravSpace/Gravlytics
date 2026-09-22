@@ -1,0 +1,33 @@
+# Gravlytics Production Caddyfile
+# Automatic HTTPS, HTTP/3, and reverse proxy routing
+
+{
+    email {$ACME_EMAIL:admin@example.com}
+}
+
+{$APP_DOMAIN:localhost} {
+    encode zstd gzip
+
+    # Tracker script caching (1 day browser cache, 7 days stale-while-revalidate)
+    @tracker path /gravlytics.js /gravlytics.min.js
+    handle @tracker {
+        header Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+        header Access-Control-Allow-Origin "*"
+        reverse_proxy collector:8081
+    }
+
+    # Ingestion API endpoint
+    handle /api/collect {
+        reverse_proxy collector:8081
+    }
+
+    # Query API endpoints
+    handle /api/stats/* {
+        reverse_proxy query:8082
+    }
+
+    # Dashboard Web Application
+    handle {
+        reverse_proxy web:3000
+    }
+}

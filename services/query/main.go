@@ -17,6 +17,8 @@ import (
 )
 
 func main() {
+	loadEnv()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -26,7 +28,7 @@ func main() {
 
 	// ClickHouse
 	chHost := envOr("CLICKHOUSE_HOST", "localhost")
-	chPort := envOr("CLICKHOUSE_PORT", "9000")
+	chPort := envOr("CLICKHOUSE_PORT", "9009")
 	chDB := envOr("CLICKHOUSE_DB", "gravlytics")
 	chUser := envOr("CLICKHOUSE_USER", "default")
 	chPassword := envOr("CLICKHOUSE_PASSWORD", "gravlytics_dev")
@@ -50,11 +52,36 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Stats endpoints
+	// Stats endpoints (support both /api/v1/stats and /api/stats)
 	mux.HandleFunc("GET /api/v1/stats/overview", h.Overview)
 	mux.HandleFunc("GET /api/v1/stats/timeseries", h.TimeSeries)
 	mux.HandleFunc("GET /api/v1/stats/breakdown", h.Breakdown)
 	mux.HandleFunc("GET /api/v1/stats/realtime", h.Realtime)
+	mux.HandleFunc("GET /api/v1/stats/goals", h.Goals)
+	mux.HandleFunc("POST /api/v1/stats/goals", h.Goals)
+	mux.HandleFunc("GET /api/v1/stats/funnel", h.Funnel)
+	mux.HandleFunc("POST /api/v1/stats/funnel", h.Funnel)
+	mux.HandleFunc("GET /api/v1/stats/retention", h.Retention)
+	mux.HandleFunc("GET /api/v1/stats/sessions", h.Sessions)
+	mux.HandleFunc("GET /api/v1/stats/events", h.Events)
+	mux.HandleFunc("GET /api/v1/stats/events/properties", h.EventProperties)
+	mux.HandleFunc("GET /api/v1/stats/vitals", h.Vitals)
+	mux.HandleFunc("GET /api/v1/stats/ads", h.Ads)
+
+	mux.HandleFunc("GET /api/stats/overview", h.Overview)
+	mux.HandleFunc("GET /api/stats/timeseries", h.TimeSeries)
+	mux.HandleFunc("GET /api/stats/breakdown", h.Breakdown)
+	mux.HandleFunc("GET /api/stats/realtime", h.Realtime)
+	mux.HandleFunc("GET /api/stats/goals", h.Goals)
+	mux.HandleFunc("POST /api/stats/goals", h.Goals)
+	mux.HandleFunc("GET /api/stats/funnel", h.Funnel)
+	mux.HandleFunc("POST /api/stats/funnel", h.Funnel)
+	mux.HandleFunc("GET /api/stats/retention", h.Retention)
+	mux.HandleFunc("GET /api/stats/sessions", h.Sessions)
+	mux.HandleFunc("GET /api/stats/events", h.Events)
+	mux.HandleFunc("GET /api/stats/events/properties", h.EventProperties)
+	mux.HandleFunc("GET /api/stats/vitals", h.Vitals)
+	mux.HandleFunc("GET /api/stats/ads", h.Ads)
 
 	// Health
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -99,12 +126,36 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+func loadEnv() {
+	paths := []string{".env", "../.env", "../../.env"}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					k := strings.TrimSpace(parts[0])
+					v := strings.TrimSpace(parts[1])
+					if os.Getenv(k) == "" {
+						os.Setenv(k, v)
+					}
+				}
+			}
+			return
+		}
+	}
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 		}

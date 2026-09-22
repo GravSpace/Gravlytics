@@ -16,6 +16,8 @@ import (
 )
 
 func main() {
+	loadEnv()
+
 	// Structured logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -31,7 +33,7 @@ func main() {
 	flushIntervalMs := envOrInt("CONSUMER_FLUSH_INTERVAL_MS", 2000)
 
 	chHost := envOr("CLICKHOUSE_HOST", "localhost")
-	chPort := envOr("CLICKHOUSE_PORT", "9000")
+	chPort := envOr("CLICKHOUSE_PORT", "9009")
 	chDB := envOr("CLICKHOUSE_DB", "gravlytics")
 	chUser := envOr("CLICKHOUSE_USER", "default")
 	chPassword := envOr("CLICKHOUSE_PASSWORD", "gravlytics_dev")
@@ -102,4 +104,28 @@ func envOrInt(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+func loadEnv() {
+	paths := []string{".env", "../.env", "../../.env"}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					k := strings.TrimSpace(parts[0])
+					v := strings.TrimSpace(parts[1])
+					if os.Getenv(k) == "" {
+						os.Setenv(k, v)
+					}
+				}
+			}
+			return
+		}
+	}
 }

@@ -1,0 +1,74 @@
+{
+  "orgs": [
+    {
+      "id": "org-admin-1",
+      "name": "Gravlytics Official Team",
+      "slug": "gravlytics-official"
+    },
+    {
+      "id": "org-demo-1",
+      "name": "Demo Workspace",
+      "slug": "demo-workspace"
+    }
+  ],
+  "members": [
+    {
+      "id": "mem-admin-1",
+      "orgId": "org-admin-1",
+      "userId": "usr_admin_default",
+      "role": "Owner",
+      "joinedAt": "2026-01-15"
+    },
+    {
+      "id": "mem-demo-1",
+      "orgId": "org-demo-1",
+      "userId": "usr_demo_default",
+      "role": "Owner",
+      "joinedAt": "2026-02-01"
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-demo-1",
+      "orgId": "org-admin-1",
+      "domain": "gravlytics.dev",
+      "name": "Gravlytics Official",
+      "timezone": "UTC",
+      "trackingId": "gly_demo_8829",
+      "public": true,
+      "createdAt": "2026-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "site-demo-2",
+      "orgId": "org-admin-1",
+      "domain": "docs.gravlytics.dev",
+      "name": "Documentation",
+      "timezone": "UTC",
+      "trackingId": "gly_demo_9912",
+      "public": false,
+      "createdAt": "2026-01-20T00:00:00.000Z"
+    },
+    {
+      "id": "site-demo-3",
+      "orgId": "org-demo-1",
+      "domain": "my-store.example.com",
+      "name": "My Demo Store",
+      "timezone": "UTC",
+      "trackingId": "gly_demo_4412",
+      "public": true,
+      "createdAt": "2026-02-01T00:00:00.000Z"
+    }
+  ],
+  "apiKeys": [
+    {
+      "id": "key-demo-1",
+      "siteId": "site-demo-1",
+      "name": "Production Ingestion Key",
+      "prefix": "gly_demo",
+      "scope": "all",
+      "createdAt": "2026-09-22T09:53:09.335Z",
+      "lastUsedAt": "2026-09-22T09:53:09.335Z"
+    }
+  ],
+  "invitations": []
+}

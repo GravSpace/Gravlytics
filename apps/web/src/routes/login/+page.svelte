@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { ActionData } from './$types';
+	import { themeStore } from '$lib/stores/theme.svelte';
+	import { Sun, Moon } from '@lucide/svelte';
 
 	let { form }: { form: ActionData } = $props();
 	let email = $state('');
@@ -11,7 +13,24 @@
 	<title>Sign In — Gravlytics</title>
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center p-4">
+<div class="relative flex min-h-screen items-center justify-center p-4">
+	<!-- Theme toggle button -->
+	<div class="absolute top-5 right-5 z-20">
+		<button
+			type="button"
+			onclick={() => themeStore.toggle()}
+			class="btn-ghost flex h-9 w-9 items-center justify-center rounded-lg shadow-sm"
+			title="Toggle Dark / Light Theme"
+			aria-label="Toggle Dark / Light Theme"
+		>
+			{#if themeStore.current === 'dark'}
+				<Sun size={16} class="text-amber-400" />
+			{:else}
+				<Moon size={16} class="text-indigo-600" />
+			{/if}
+		</button>
+	</div>
+
 	<div class="glass-card relative w-full max-w-md overflow-hidden p-8 shadow-2xl">
 		<!-- Background glow -->
 		<div
@@ -27,12 +46,12 @@
 				<span class="text-xl font-black text-white">G</span>
 			</div>
 			<h1 class="gradient-accent-text text-2xl font-bold tracking-tight">Gravlytics</h1>
-			<p class="mt-1 text-xs text-muted-light">Sign in to your privacy-first analytics dashboard</p>
+			<p class="mt-1 text-xs text-label">Sign in to your privacy-first analytics dashboard</p>
 		</div>
 
 		<!-- Error Alert -->
 		{#if form?.error}
-			<div class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-400">
+			<div class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-500 dark:text-red-400">
 				{form.error}
 			</div>
 		{/if}
@@ -40,7 +59,7 @@
 		<!-- Form -->
 		<form method="POST" class="flex flex-col gap-4">
 			<div>
-				<label for="email" class="mb-1.5 block text-xs font-medium text-muted-light">Email Address</label>
+				<label for="email" class="mb-1.5 block text-xs font-medium text-heading">Email Address</label>
 				<input
 					id="email"
 					name="email"
@@ -48,14 +67,14 @@
 					required
 					bind:value={email}
 					placeholder="name@company.com"
-					class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2.5 text-sm text-white placeholder-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+					class="w-full rounded-lg border border-themed-strong bg-input px-3.5 py-2.5 text-sm text-heading placeholder:text-hint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
 				/>
 			</div>
 
 			<div>
 				<div class="mb-1.5 flex items-center justify-between">
-					<label for="password" class="text-xs font-medium text-muted-light">Password</label>
-					<span class="text-[11px] text-accent cursor-pointer hover:underline">Forgot password?</span>
+					<label for="password" class="text-xs font-medium text-heading">Password</label>
+					<span class="text-[11px] text-indigo-600 dark:text-accent cursor-pointer hover:underline">Forgot password?</span>
 				</div>
 				<input
 					id="password"
@@ -64,7 +83,7 @@
 					required
 					bind:value={password}
 					placeholder="••••••••"
-					class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2.5 text-sm text-white placeholder-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+					class="w-full rounded-lg border border-themed-strong bg-input px-3.5 py-2.5 text-sm text-heading placeholder:text-hint focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
 				/>
 			</div>
 
@@ -79,16 +98,16 @@
 
 		<!-- OAuth Divider -->
 		<div class="my-6 flex items-center gap-3">
-			<div class="h-px flex-1 bg-ink-border"></div>
-			<span class="text-[11px] uppercase tracking-wider text-muted">Or continue with</span>
-			<div class="h-px flex-1 bg-ink-border"></div>
+			<div class="h-px flex-1 border-t border-divider-strong"></div>
+			<span class="text-[11px] uppercase tracking-wider text-hint">Or continue with</span>
+			<div class="h-px flex-1 border-t border-divider-strong"></div>
 		</div>
 
 		<!-- OAuth Buttons -->
 		<div class="grid grid-cols-2 gap-3">
 			<button
 				type="button"
-				class="flex items-center justify-center gap-2 rounded-lg border border-ink-border bg-ink-lighter py-2 text-xs font-medium text-white transition-colors hover:bg-ink hover:border-primary/50"
+				class="flex items-center justify-center gap-2 rounded-lg border border-themed-strong bg-input hover:bg-card-hover py-2 text-xs font-medium text-heading transition-colors hover:border-primary/50 shadow-sm"
 			>
 				<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
 					<path
@@ -99,7 +118,7 @@
 			</button>
 			<button
 				type="button"
-				class="flex items-center justify-center gap-2 rounded-lg border border-ink-border bg-ink-lighter py-2 text-xs font-medium text-white transition-colors hover:bg-ink hover:border-primary/50"
+				class="flex items-center justify-center gap-2 rounded-lg border border-themed-strong bg-input hover:bg-card-hover py-2 text-xs font-medium text-heading transition-colors hover:border-primary/50 shadow-sm"
 			>
 				<svg class="h-4 w-4" viewBox="0 0 24 24">
 					<path
@@ -124,9 +143,9 @@
 		</div>
 
 		<!-- Footer Link -->
-		<p class="mt-8 text-center text-xs text-muted-light">
+		<p class="mt-8 text-center text-xs text-label">
 			Don't have an account yet?
-			<a href="/register" class="font-medium text-accent hover:underline">Create an account</a>
+			<a href="/register" class="font-medium text-indigo-600 dark:text-accent hover:underline">Create an account</a>
 		</p>
 	</div>
 </div>

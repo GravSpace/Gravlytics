@@ -1,0 +1,16 @@
+[
+  {
+    "id": "usr_admin_default",
+    "email": "admin@gravlytics.dev",
+    "name": "Admin Gravlytics",
+    "passwordHash": "8a7f8f0f1d62ddb8e4c34e0265603963:0649c8392d31b19e2f000e272706c54d78811dcc545354ba3461516f0510c3b3b93797356df72c74f914894b2bb2bc0428d70dc0fa572e9658cab797e4c12ef9",
+    "createdAt": "2026-01-15T00:00:00.000Z"
+  },
+  {
+    "id": "usr_demo_default",
+    "email": "demo@gravlytics.com",
+    "name": "Demo Analyst",
+    "passwordHash": "05d147dfe9cd8a6338b53d82c5a4d72b:e599c6fcc8e86cb2fad2d6a648b252295763e050154ee3c065f200530f958dc5f2d34846a0ee75a537f88e27934c3f810dce1849071e47eb9ba98453ab72e704",
+    "createdAt": "2026-02-01T00:00:00.000Z"
+  }
+]

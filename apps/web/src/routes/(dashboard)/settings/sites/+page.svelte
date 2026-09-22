@@ -1,22 +1,20 @@
 <script lang="ts">
-	let sites = $state([
-		{
-			id: 'site-demo-1',
-			domain: 'gravlytics.dev',
-			name: 'Gravlytics Official',
-			trackingId: 'gly_demo_8829',
-			timezone: 'UTC',
-			createdAt: '2026-03-10'
-		},
-		{
-			id: 'site-demo-2',
-			domain: 'docs.gravlytics.dev',
-			name: 'Documentation Site',
-			trackingId: 'gly_demo_9912',
-			timezone: 'UTC',
-			createdAt: '2026-03-15'
-		}
-	]);
+	import { User, Sliders, Globe, Users, Key, Plus, Code2, Copy, Check, Trash2, X } from '@lucide/svelte';
+
+	import { onMount } from 'svelte';
+	import { siteStore } from '$lib/stores/site.svelte';
+
+	interface SiteItem {
+		id: string;
+		domain: string;
+		name: string;
+		trackingId: string;
+		timezone: string;
+		createdAt: string;
+	}
+
+	let sites = $state<SiteItem[]>([]);
+	let isLoading = $state(true);
 
 	let showAddModal = $state(false);
 	let selectedSnippetSite = $state<{ name: string; trackingId: string } | null>(null);
@@ -25,26 +23,51 @@
 	let newName = $state('');
 	let copied = $state(false);
 
-	function handleAddSite() {
-		if (!newDomain) return;
-		const id = 'site_' + Math.random().toString(36).substring(2, 8);
-		const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
-		sites.push({
-			id,
-			domain: newDomain,
-			name: newName || newDomain,
-			trackingId,
-			timezone: 'UTC',
-			createdAt: new Date().toISOString().split('T')[0]
-		});
-		newDomain = '';
-		newName = '';
-		showAddModal = false;
+	async function loadSites() {
+		try {
+			const res = await fetch('/api/sites');
+			if (res.ok) {
+				sites = await res.json();
+				await siteStore.loadSites();
+			}
+		} catch (err) {
+			console.error('Failed to load sites', err);
+		} finally {
+			isLoading = false;
+		}
 	}
 
-	function handleDelete(siteId: string) {
-		sites = sites.filter((s) => s.id !== siteId);
+	async function handleAddSite() {
+		if (!newDomain) return;
+		try {
+			const res = await fetch('/api/sites', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ domain: newDomain, name: newName || newDomain })
+			});
+			if (res.ok) {
+				newDomain = '';
+				newName = '';
+				showAddModal = false;
+				await loadSites();
+			}
+		} catch (err) {
+			console.error('Failed to create site', err);
+		}
 	}
+
+	async function handleDelete(siteId: string) {
+		try {
+			await fetch(`/api/sites?id=${siteId}`, { method: 'DELETE' });
+			await loadSites();
+		} catch (err) {
+			console.error('Failed to delete site', err);
+		}
+	}
+
+	onMount(() => {
+		loadSites();
+	});
 
 	function copySnippet(trackingId: string) {
 		const snippet = `<script defer data-site-id="${trackingId}" src="https://analytics.yourdomain.com/gravlytics.js"><\/script>`;
@@ -55,64 +78,84 @@
 </script>
 
 <svelte:head>
-	<title>Site Management — Gravlytics</title>
+	<title>Sites & Properties — Gravlytics</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 max-w-4xl">
-	<div class="flex items-center justify-between">
-		<div class="flex flex-col gap-1">
-			<h1 class="text-2xl font-bold tracking-tight text-white">Sites & Domains</h1>
-			<p class="text-sm text-muted-light">Manage registered web properties and get tracking snippets</p>
+<div class="flex flex-col gap-4 max-w-4xl">
+	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+		<div class="flex flex-col">
+			<h1 class="text-lg font-bold tracking-tight text-heading">Sites & Domains</h1>
+			<p class="text-xs text-label">Manage registered web properties and copy telemetry snippets</p>
 		</div>
 		<button
 			onclick={() => (showAddModal = true)}
-			class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90 active:scale-[0.98]"
+			class="flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors active:scale-[0.98]"
 		>
-			+ Add Site
+			<Plus size={14} strokeWidth={2} />
+			<span>Add Site</span>
 		</button>
 	</div>
 
 	<!-- Navigation Tabs -->
-	<div class="flex items-center gap-2 border-b border-ink-border pb-3">
-		<a href="/settings" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">General</a>
-		<a href="/settings/sites" class="rounded-lg bg-ink-lighter px-3.5 py-1.5 text-xs font-semibold text-white">Sites</a>
-		<a href="/settings/team" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">Team</a>
-		<a href="/settings/api-keys" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">API Keys</a>
+	<div class="flex items-center gap-1.5 border-b border-themed pb-2 text-xs overflow-x-auto no-scrollbar">
+		<a href="/settings/profile" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<User size={13} />
+			<span>Profile</span>
+		</a>
+		<a href="/settings" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Sliders size={13} />
+			<span>General</span>
+		</a>
+		<a href="/settings/sites" class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white shadow-sm whitespace-nowrap shrink-0">
+			<Globe size={13} />
+			<span>Sites</span>
+		</a>
+		<a href="/settings/team" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Users size={13} />
+			<span>Team</span>
+		</a>
+		<a href="/settings/api-keys" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Key size={13} />
+			<span>API Keys</span>
+		</a>
 	</div>
 
 	<!-- Sites List -->
-	<div class="flex flex-col gap-3">
+	<div class="flex flex-col gap-2">
 		{#each sites as site}
-			<div class="glass-card flex items-center justify-between p-5">
-				<div class="flex items-center gap-4">
-					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-lg">
-						🌐
+			<div class="flex items-center justify-between card p-3.5 px-4 transition-colors hover:border-indigo-500/30">
+				<div class="flex items-center gap-3">
+					<div class="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+						<Globe size={16} strokeWidth={1.75} />
 					</div>
 					<div>
-						<h3 class="text-sm font-semibold text-white">{site.name}</h3>
-						<p class="text-xs text-muted-light">{site.domain}</p>
+						<h3 class="text-xs font-semibold text-heading">{site.name}</h3>
+						<p class="font-mono text-[11px] text-label">{site.domain}</p>
 					</div>
 				</div>
 
 				<div class="flex items-center gap-3">
-					<div class="hidden sm:flex flex-col items-end mr-3">
-						<span class="text-[11px] font-mono text-muted-light">Site ID: {site.trackingId}</span>
-						<span class="text-[10px] text-muted">Added {site.createdAt}</span>
+					<div class="hidden sm:flex flex-col items-end mr-2">
+						<span class="text-[11px] font-mono text-body">Site ID: {site.trackingId}</span>
+						<span class="text-[10px] text-hint">Created {site.createdAt}</span>
 					</div>
 
 					<button
 						onclick={() => (selectedSnippetSite = site)}
-						class="rounded-lg border border-ink-border bg-ink-lighter px-3 py-1.5 text-xs font-medium text-muted-light hover:border-primary/50 hover:text-white"
+						class="flex items-center gap-1.5 rounded-md border border-themed bg-input px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-input hover:text-gray-400 transition-colors"
+						title="Get Tracker Code"
 					>
-						Snippet
+						<Code2 size={13} />
+						<span class="hidden md:inline">Snippet</span>
 					</button>
 
 					<button
 						onclick={() => handleDelete(site.id)}
-						class="rounded-lg p-2 text-muted hover:text-red-400 hover:bg-red-500/10"
+						class="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-500/10 hover:text-rose-400 transition-colors"
 						title="Delete Site"
+						aria-label="Delete Site"
 					>
-						🗑️
+						<Trash2 size={13} strokeWidth={1.75} />
 					</button>
 				</div>
 			</div>
@@ -122,45 +165,51 @@
 	<!-- Add Site Modal -->
 	{#if showAddModal}
 		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-			<div class="glass-card w-full max-w-md p-6 shadow-2xl flex flex-col gap-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-base font-semibold text-white">Add New Site</h2>
-					<button onclick={() => (showAddModal = false)} class="text-muted hover:text-white">✕</button>
+			<div class="w-full max-w-md card-modal p-5 flex flex-col gap-4">
+				<div class="flex items-center justify-between border-b border-themed pb-3">
+					<div class="flex items-center gap-2">
+						<Globe size={16} class="text-indigo-400" />
+						<h2 class="text-sm font-bold text-heading">Register New Domain</h2>
+					</div>
+					<button onclick={() => (showAddModal = false)} class="text-slate-400 hover:text-heading" aria-label="Close">
+						<X size={16} />
+					</button>
 				</div>
 
 				<div class="flex flex-col gap-3">
 					<div>
-						<label for="new-domain" class="mb-1.5 block text-xs font-medium text-muted-light">Domain</label>
+						<label for="domain" class="mb-1 block text-[11px] font-medium text-body">Domain / Hostname</label>
 						<input
-							id="new-domain"
+							id="domain"
 							type="text"
 							bind:value={newDomain}
-							placeholder="mywebsite.com"
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							placeholder="e.g. yoursite.com"
+							class="w-full rounded-md input-field px-3 py-1.5 text-xs"
 						/>
 					</div>
+
 					<div>
-						<label for="new-name" class="mb-1.5 block text-xs font-medium text-muted-light">Site Name (optional)</label>
+						<label for="name" class="mb-1 block text-[11px] font-medium text-body">Site Display Name (Optional)</label>
 						<input
-							id="new-name"
+							id="name"
 							type="text"
 							bind:value={newName}
-							placeholder="My Awesome Website"
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							placeholder="e.g. My SaaS Landing"
+							class="w-full rounded-md input-field px-3 py-1.5 text-xs"
 						/>
 					</div>
 				</div>
 
-				<div class="mt-2 flex justify-end gap-2">
+				<div class="mt-2 flex justify-end gap-2 border-t border-themed pt-3">
 					<button
 						onclick={() => (showAddModal = false)}
-						class="rounded-lg px-4 py-2 text-xs font-medium text-muted-light hover:bg-ink-lighter"
+						class="rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-heading"
 					>
 						Cancel
 					</button>
 					<button
 						onclick={handleAddSite}
-						class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90"
+						class="rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
 					>
 						Add Site
 					</button>
@@ -169,32 +218,40 @@
 		</div>
 	{/if}
 
-	<!-- Tracking Snippet Modal -->
+	<!-- Snippet Modal -->
 	{#if selectedSnippetSite}
 		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-			<div class="glass-card w-full max-w-lg p-6 shadow-2xl flex flex-col gap-4">
-				<div class="flex items-center justify-between">
-					<div>
-						<h2 class="text-base font-semibold text-white">Embed Tracking Code</h2>
-						<p class="text-xs text-muted-light">{selectedSnippetSite.name} ({selectedSnippetSite.trackingId})</p>
+			<div class="w-full max-w-lg card-modal p-5 flex flex-col gap-4">
+				<div class="flex items-center justify-between border-b border-themed pb-3">
+					<div class="flex items-center gap-2">
+						<Code2 size={16} class="text-indigo-400" />
+						<h2 class="text-sm font-bold text-heading">Embed Script for {selectedSnippetSite.name}</h2>
 					</div>
-					<button onclick={() => (selectedSnippetSite = null)} class="text-muted hover:text-white">✕</button>
+					<button onclick={() => (selectedSnippetSite = null)} class="text-slate-400 hover:text-heading" aria-label="Close">
+						<X size={16} />
+					</button>
 				</div>
 
-				<p class="text-xs text-muted-light">
-					Paste this snippet inside the <code class="font-mono text-accent">&lt;head&gt;</code> of your website. It's cookieless, lightweight (&lt;2KB), and respects Do Not Track.
+				<p class="text-xs text-label">
+					Place this lightweight snippet inside the <code class="text-indigo-300">&lt;head&gt;</code> tag of your website:
 				</p>
 
-				<div class="relative rounded-lg border border-ink-border bg-ink p-4 font-mono text-xs text-emerald-300 overflow-x-auto">
-					&lt;script defer data-site-id="{selectedSnippetSite.trackingId}" src="https://analytics.yourdomain.com/gravlytics.js"&gt;&lt;/script&gt;
-				</div>
+				<pre class="overflow-x-auto rounded-lg border border-themed bg-code p-3 font-mono text-[11px] text-cyan-500 select-all">
+&lt;script defer data-site-id="{selectedSnippetSite.trackingId}" src="http://localhost:8081/gravlytics.js"&gt;&lt;/script&gt;</pre>
 
-				<div class="flex justify-end gap-2">
+				<div class="flex items-center justify-between border-t border-themed pt-3">
+					<span class="text-[11px] text-hint">&lt; 1 KB footprint • Cookieless</span>
 					<button
-						onclick={() => copySnippet(selectedSnippetSite!.trackingId)}
-						class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90"
+						onclick={() => copySnippet(selectedSnippetSite?.trackingId || '')}
+						class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
 					>
-						{copied ? '✓ Copied to Clipboard' : 'Copy Snippet'}
+						{#if copied}
+							<Check size={14} />
+							<span>Copied!</span>
+						{:else}
+							<Copy size={14} />
+							<span>Copy Snippet</span>
+						{/if}
 					</button>
 				</div>
 			</div>

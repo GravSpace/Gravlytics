@@ -1,84 +1,192 @@
 <script lang="ts">
-	let orgName = $state('Gravlytics Team');
-	let orgSlug = $state('gravlytics-team');
-	let isSaved = $state(false);
+	import { User, Sliders, Globe, Users, Key, Check, AlertTriangle, Loader2 } from '@lucide/svelte';
+	import { onMount } from 'svelte';
 
-	function handleSave() {
-		isSaved = true;
-		setTimeout(() => (isSaved = false), 2500);
+	let orgName = $state('');
+	let orgSlug = $state('');
+	let role = $state<string>('');
+	let isLoading = $state(true);
+	let isSaving = $state(false);
+	let isSaved = $state(false);
+	let errorMessage = $state('');
+
+	async function loadOrganization() {
+		isLoading = true;
+		try {
+			const res = await fetch('/api/organization');
+			if (res.ok) {
+				const data = await res.json();
+				if (data.organization) {
+					orgName = data.organization.name;
+					orgSlug = data.organization.slug;
+					role = data.role || 'Member';
+				}
+			}
+		} catch (err) {
+			console.error('Failed to load organization', err);
+		} finally {
+			isLoading = false;
+		}
 	}
+
+	async function handleSave() {
+		if (!orgName.trim()) {
+			errorMessage = 'Organization name is required';
+			return;
+		}
+
+		isSaving = true;
+		errorMessage = '';
+		isSaved = false;
+
+		try {
+			const res = await fetch('/api/organization', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: orgName, slug: orgSlug })
+			});
+
+			const data = await res.json();
+			if (res.ok) {
+				if (data.organization) {
+					orgName = data.organization.name;
+					orgSlug = data.organization.slug;
+				}
+				isSaved = true;
+				setTimeout(() => (isSaved = false), 3000);
+			} else {
+				errorMessage = data.error || 'Failed to update organization';
+			}
+		} catch {
+			errorMessage = 'Network error while updating organization';
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	onMount(() => {
+		loadOrganization();
+	});
 </script>
 
 <svelte:head>
 	<title>Organization Settings — Gravlytics</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 max-w-3xl">
-	<div class="flex flex-col gap-1">
-		<h1 class="text-2xl font-bold tracking-tight text-white">Organization Settings</h1>
-		<p class="text-sm text-muted-light">Manage your organization profile, tenants, and preferences</p>
+<div class="flex flex-col gap-4 max-w-3xl">
+	<div class="flex flex-col">
+		<h1 class="text-lg font-bold tracking-tight text-heading">Organization Settings</h1>
+		<p class="text-xs text-label">Manage tenant profiles, workspace identifier, and global configurations</p>
 	</div>
 
 	<!-- Navigation Tabs -->
-	<div class="flex items-center gap-2 border-b border-ink-border pb-3">
-		<a href="/settings" class="rounded-lg bg-ink-lighter px-3.5 py-1.5 text-xs font-semibold text-white">General</a>
-		<a href="/settings/sites" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">Sites</a>
-		<a href="/settings/team" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">Team</a>
-		<a href="/settings/api-keys" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">API Keys</a>
+	<div class="flex items-center gap-1.5 border-b border-themed pb-2 text-xs overflow-x-auto no-scrollbar">
+		<a href="/settings/profile" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<User size={13} />
+			<span>Profile</span>
+		</a>
+		<a href="/settings" class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white shadow-sm whitespace-nowrap shrink-0">
+			<Sliders size={13} />
+			<span>General</span>
+		</a>
+		<a href="/settings/sites" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Globe size={13} />
+			<span>Sites</span>
+		</a>
+		<a href="/settings/team" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Users size={13} />
+			<span>Team</span>
+		</a>
+		<a href="/settings/api-keys" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Key size={13} />
+			<span>API Keys</span>
+		</a>
 	</div>
 
-	<div class="glass-card p-6 flex flex-col gap-5">
-		<h2 class="text-base font-semibold text-white">General Information</h2>
+	<div class="card-inset p-5 flex flex-col gap-4 relative">
+		<div class="flex items-center justify-between">
+			<h2 class="text-xs font-semibold uppercase tracking-wider text-body">General Information</h2>
+			{#if role}
+				<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+					Role: {role}
+				</span>
+			{/if}
+		</div>
 
-		<div class="flex flex-col gap-4">
-			<div>
-				<label for="org-name" class="mb-1.5 block text-xs font-medium text-muted-light">Organization Name</label>
-				<input
-					id="org-name"
-					type="text"
-					bind:value={orgName}
-					class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2.5 text-sm text-white focus:border-primary focus:outline-none"
-				/>
+		{#if errorMessage}
+			<div class="p-3 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400">
+				{errorMessage}
 			</div>
+		{/if}
 
-			<div>
-				<label for="org-slug" class="mb-1.5 block text-xs font-medium text-muted-light">Organization Slug (URL identifier)</label>
-				<div class="flex items-center rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2.5">
-					<span class="text-sm text-muted mr-1">app.gravlytics.dev/</span>
+		{#if isLoading}
+			<div class="flex items-center justify-center py-8 text-label gap-2">
+				<Loader2 size={16} class="animate-spin text-indigo-500" />
+				<span class="text-xs">Loading workspace details...</span>
+			</div>
+		{:else}
+			<div class="flex flex-col gap-3">
+				<div>
+					<label for="org-name" class="mb-1 block text-[11px] font-medium text-body">Organization Name</label>
 					<input
-						id="org-slug"
+						id="org-name"
 						type="text"
-						bind:value={orgSlug}
-						class="w-full bg-transparent text-sm text-white focus:outline-none"
+						bind:value={orgName}
+						disabled={role !== 'Owner' && role !== 'Admin'}
+						class="w-full rounded-md input-field px-3 py-1.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
 					/>
 				</div>
-			</div>
-		</div>
 
-		<div class="mt-2 flex items-center justify-between border-t border-ink-border pt-4">
-			{#if isSaved}
-				<span class="text-xs text-emerald-400">✓ Settings saved successfully</span>
-			{:else}
-				<span></span>
-			{/if}
-			<button
-				onclick={handleSave}
-				class="gradient-accent rounded-lg px-5 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/20 hover:opacity-90 active:scale-[0.98]"
-			>
-				Save Changes
-			</button>
-		</div>
+				<div>
+					<label for="org-slug" class="mb-1 block text-[11px] font-medium text-body">Organization Slug (URL identifier)</label>
+					<div class="flex items-center rounded-md border border-themed bg-input px-3 py-1.5 font-mono text-xs">
+						<span class="text-slate-500 mr-1">app.gravlytics.dev/</span>
+						<input
+							id="org-slug"
+							type="text"
+							bind:value={orgSlug}
+							disabled={role !== 'Owner' && role !== 'Admin'}
+							class="w-full bg-transparent text-heading focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+						/>
+					</div>
+				</div>
+			</div>
+
+			<div class="mt-2 flex items-center justify-between border-t border-themed pt-3">
+				{#if isSaved}
+					<span class="flex items-center gap-1.5 text-xs text-emerald-400">
+						<Check size={14} />
+						<span>Settings saved successfully</span>
+					</span>
+				{:else}
+					<span></span>
+				{/if}
+				<button
+					onclick={handleSave}
+					disabled={isSaving || (role !== 'Owner' && role !== 'Admin')}
+					class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+				>
+					{#if isSaving}
+						<Loader2 size={13} class="animate-spin" />
+					{/if}
+					<span>Save Changes</span>
+				</button>
+			</div>
+		{/if}
 	</div>
 
 	<!-- Danger zone -->
-	<div class="glass-card border-red-500/20 p-6 flex flex-col gap-3">
-		<h2 class="text-sm font-semibold text-red-400">Danger Zone</h2>
-		<p class="text-xs text-muted-light">
+	<div class="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 flex flex-col gap-2">
+		<div class="flex items-center gap-2 text-rose-400">
+			<AlertTriangle size={15} />
+			<h2 class="text-xs font-semibold uppercase tracking-wider">Danger Zone</h2>
+		</div>
+		<p class="text-xs text-label">
 			Permanently delete this organization, all registered sites, tracking keys, and event history.
 		</p>
 		<div class="pt-2">
 			<button
-				class="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/20"
+				class="rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 transition-colors"
 			>
 				Delete Organization
 			</button>

@@ -27,17 +27,17 @@ Review `.env` to customize default ports or secrets if needed.
 ### 2. Launch Infrastructure Services with Podman
 
 ```bash
-# Start ClickHouse, PostgreSQL, Redpanda, Valkey, and Redpanda Console
-podman-compose -f infra/compose.yaml up -d
+# Start ClickHouse, PostgreSQL, Redpanda, and Valkey
+podman-compose -f infra/docker-compose.yaml up -d
 
 # Verify container health
 podman ps
 ```
 
 Default exposed ports:
-- **ClickHouse**: `http://localhost:8123` (Native port: `9000`)
+- **ClickHouse**: `http://localhost:8123` (Native port: `9009`)
 - **PostgreSQL**: `localhost:5432` (`postgres:gravlytics@localhost:5432/gravlytics`)
-- **Redpanda**: `localhost:9092` (Console UI: `http://localhost:8080`)
+- **Redpanda**: `localhost:19092`
 - **Valkey**: `localhost:6379`
 
 ### 3. Build & Run the Go Services

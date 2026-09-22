@@ -1,49 +1,83 @@
 <script lang="ts">
+	import { onMount, untrack } from 'svelte';
 	import BreakdownTable from '$lib/components/BreakdownTable.svelte';
+	import { Link2, Megaphone, Tag, Share2 } from '@lucide/svelte';
+	import { fetchBreakdown, type BreakdownItem } from '$lib/api';
+	import { siteStore } from '$lib/stores/site.svelte';
+	import { dateStore } from '$lib/stores/date.svelte';
 
-	const referrers = [
-		{ label: 'google.com', value: 8940, percentage: 100 },
-		{ label: 'github.com', value: 4210, percentage: 47.1 },
-		{ label: 'twitter.com / x.com', value: 3180, percentage: 35.6 },
-		{ label: 'news.ycombinator.com', value: 2450, percentage: 27.4 },
-		{ label: 'reddit.com', value: 1890, percentage: 21.1 },
-		{ label: 'linkedin.com', value: 920, percentage: 10.3 },
-		{ label: '(direct / bookmark)', value: 1240, percentage: 13.9 }
-	];
+	let referrers = $state<BreakdownItem[]>([]);
+	let utmMediums = $state<BreakdownItem[]>([]);
+	let utmCampaigns = $state<BreakdownItem[]>([]);
+	let utmSources = $state<BreakdownItem[]>([]);
+	let isLoading = $state(true);
 
-	const utmCampaigns = [
-		{ label: 'launch_producthunt_v2', value: 3820, percentage: 100 },
-		{ label: 'spring_developer_newsletter', value: 2190, percentage: 57.3 },
-		{ label: 'twitter_privacy_thread', value: 1450, percentage: 37.9 },
-		{ label: 'oss_sponsorship_promo', value: 890, percentage: 23.3 }
-	];
+	async function loadSources() {
+		try {
+			const current = siteStore.activeSiteId;
+			if (!current) return;
+			const from = dateStore.from;
+			const to = dateStore.to;
 
-	const utmMediums = [
-		{ label: 'organic', value: 9420, percentage: 100 },
-		{ label: 'social', value: 5070, percentage: 53.8 },
-		{ label: 'referral', value: 4320, percentage: 45.8 },
-		{ label: 'email', value: 2190, percentage: 23.2 },
-		{ label: 'cpc', value: 450, percentage: 4.8 }
-	];
+			const [ref, med, camp, src] = await Promise.all([
+				fetchBreakdown(current, 'referrer_domain', from, to, 20),
+				fetchBreakdown(current, 'utm_medium', from, to, 20),
+				fetchBreakdown(current, 'utm_campaign', from, to, 20),
+				fetchBreakdown(current, 'utm_source', from, to, 20)
+			]);
+
+			referrers = ref;
+			utmMediums = med;
+			utmCampaigns = camp;
+			utmSources = src;
+		} catch (err) {
+			console.error('Failed to load sources data', err);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	let lastSiteId = '';
+	let lastDateVersion = -1;
+
+	$effect(() => {
+		const current = siteStore.activeSiteId;
+		const ver = dateStore.version;
+		if (current && (current !== lastSiteId || ver !== lastDateVersion)) {
+			lastSiteId = current;
+			lastDateVersion = ver;
+			untrack(() => {
+				loadSources();
+			});
+		}
+	});
+
+	onMount(() => {
+		const interval = setInterval(() => {
+			loadSources();
+		}, 10000);
+		return () => clearInterval(interval);
+	});
 </script>
 
 <svelte:head>
 	<title>Acquisition Sources — Gravlytics</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6">
-	<div class="flex flex-col gap-1">
-		<h1 class="text-2xl font-bold tracking-tight text-white">Acquisition & Traffic Sources</h1>
-		<p class="text-sm text-muted-light">Understand where your audience is discovering your site</p>
+<div class="flex flex-col gap-4">
+	<div class="flex flex-col">
+		<h1 class="text-lg font-bold tracking-tight text-heading">Acquisition & Traffic Sources</h1>
+		<p class="text-xs text-label">Discover where your audience originates and measure inbound campaigns</p>
 	</div>
 
 	<!-- Breakdown Grid -->
-	<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-		<BreakdownTable title="🔗 Referring Domains" items={referrers} />
-		<BreakdownTable title="📣 UTM Mediums" items={utmMediums} />
+	<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+		<BreakdownTable title="Referring Domains" items={referrers} icon={Link2} metricLabel="Visitors" />
+		<BreakdownTable title="UTM Sources" items={utmSources} icon={Share2} metricLabel="Visitors" />
 	</div>
 
-	<div class="grid grid-cols-1 gap-6">
-		<BreakdownTable title="🎯 Active UTM Campaigns" items={utmCampaigns} />
+	<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+		<BreakdownTable title="Active Campaigns" items={utmCampaigns} icon={Megaphone} metricLabel="Visitors" />
+		<BreakdownTable title="Marketing Mediums" items={utmMediums} icon={Tag} metricLabel="Visitors" />
 	</div>
 </div>

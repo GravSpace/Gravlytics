@@ -1,0 +1,215 @@
+services:
+  # ── Reverse Proxy (Automatic HTTPS / SSL) ──
+  caddy:
+    image: caddy:2-alpine
+    container_name: gravlytics-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - gravlytics-net
+    depends_on:
+      - collector
+      - query
+      - web
+
+  # ── ClickHouse OLAP Data Store ──
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: gravlytics-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9009:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-gravlytics}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-gravlytics_dev}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - gravlytics-net
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PostgreSQL Metadata Store ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: gravlytics-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gravlytics}
+      POSTGRES_USER: ${POSTGRES_USER:-gravlytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gravlytics_dev}
+    networks:
+      - gravlytics-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gravlytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redpanda Streaming Buffer ──
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.12
+    container_name: gravlytics-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --node-id 0
+      - --set redpanda.auto_create_topics_enabled=true
+    ports:
+      - "19092:19092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks:
+      - gravlytics-net
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Valkey Cache ──
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: gravlytics-valkey
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    networks:
+      - gravlytics-net
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Collector Service (Ingestion) ──
+  collector:
+    build:
+      context: ../services/collector
+      dockerfile: Dockerfile
+    container_name: gravlytics-collector
+    restart: unless-stopped
+    environment:
+      COLLECTOR_PORT: "8081"
+      REDPANDA_BROKERS: "redpanda:9092"
+      REDPANDA_TOPIC_EVENTS: "events"
+    ports:
+      - "8081:8081"
+    networks:
+      - gravlytics-net
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # ── Consumer Service (Worker) ──
+  consumer:
+    build:
+      context: ../services/consumer
+      dockerfile: Dockerfile
+    container_name: gravlytics-consumer
+    restart: unless-stopped
+    environment:
+      REDPANDA_BROKERS: "redpanda:9092"
+      REDPANDA_TOPIC_EVENTS: "events"
+      CLICKHOUSE_HOST: "clickhouse"
+      CLICKHOUSE_PORT: "9000"
+      CLICKHOUSE_DB: "gravlytics"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-gravlytics_dev}"
+    networks:
+      - gravlytics-net
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  # ── Query API Service ──
+  query:
+    build:
+      context: ../services/query
+      dockerfile: Dockerfile
+    container_name: gravlytics-query
+    restart: unless-stopped
+    environment:
+      QUERY_PORT: "8082"
+      CLICKHOUSE_HOST: "clickhouse"
+      CLICKHOUSE_PORT: "9000"
+      CLICKHOUSE_DB: "gravlytics"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-gravlytics_dev}"
+      VALKEY_HOST: "valkey"
+      VALKEY_PORT: "6379"
+    ports:
+      - "8082:8082"
+    networks:
+      - gravlytics-net
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+  # ── Web Dashboard (SvelteKit) ──
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+    container_name: gravlytics-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: "production"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-gravlytics}:${POSTGRES_PASSWORD:-gravlytics_dev}@postgres:5432/${POSTGRES_DB:-gravlytics}"
+      VITE_QUERY_API_URL: "http://query:8082"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+    ports:
+      - "3000:3000"
+    networks:
+      - gravlytics-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  clickhouse-data:
+  postgres-data:
+  redpanda-data:
+  valkey-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  gravlytics-net:
+    driver: bridge

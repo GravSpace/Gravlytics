@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit';
+import { redirect, type Handle } from '@sveltejs/kit';
 import { verifyJWT } from '$lib/server/crypto';
 import { db } from '$lib/server/db';
 
@@ -12,6 +12,23 @@ export const handle: Handle = async ({ event, resolve }) => {
 			if (user) {
 				event.locals.user = user;
 			}
+		}
+	}
+
+	const path = event.url.pathname;
+	const isAuthRoute = path === '/login' || path === '/register';
+	const isApiRoute = path.startsWith('/api');
+	const isStaticAsset = path.startsWith('/_app') || path.startsWith('/favicon') || path.includes('.');
+
+	// Redirect authenticated users away from login/register
+	if (isAuthRoute && event.locals.user) {
+		throw redirect(303, '/');
+	}
+
+	// Protect dashboard and internal routes
+	if (!isAuthRoute && !isApiRoute && !isStaticAsset && path !== '/logout') {
+		if (!event.locals.user) {
+			throw redirect(303, '/login');
 		}
 	}
 

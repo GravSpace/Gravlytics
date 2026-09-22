@@ -1,51 +1,82 @@
 <script lang="ts">
-	let apiKeys = $state([
-		{
-			id: 'key-1',
-			name: 'Production Ingestion Key',
-			prefix: 'gly_8f92',
-			scope: 'ingestion',
-			createdAt: '2026-03-05',
-			lastUsedAt: '2 hours ago'
-		},
-		{
-			id: 'key-2',
-			name: 'BI Reporting Query Key',
-			prefix: 'gly_3c19',
-			scope: 'query',
-			createdAt: '2026-03-12',
-			lastUsedAt: 'Yesterday'
-		}
-	]);
+	import { Sliders, Globe, Users, Key, Plus, Trash2, Copy, Check, X, ShieldCheck, User, Loader2, AlertCircle } from '@lucide/svelte';
+	import { onMount } from 'svelte';
 
+	interface ApiKeyItem {
+		id: string;
+		siteId: string;
+		siteDomain?: string;
+		siteName?: string;
+		name: string;
+		prefix: string;
+		scope: string;
+		createdAt: string;
+		lastUsedAt?: string;
+	}
+
+	let apiKeys = $state<ApiKeyItem[]>([]);
+	let isLoading = $state(true);
+	let isCreating = $state(false);
+	let errorMessage = $state('');
 	let showCreateModal = $state(false);
 	let newKeyName = $state('');
 	let newKeyScope = $state('all');
 	let newlyCreatedKey = $state<string | null>(null);
 	let copied = $state(false);
 
-	function handleCreate() {
-		if (!newKeyName) return;
-		const prefix = 'gly_' + Math.random().toString(36).substring(2, 6);
-		const secret = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-		const fullKey = `${prefix}_${secret}`;
-
-		apiKeys.push({
-			id: 'key_' + Math.random().toString(36).substring(2, 8),
-			name: newKeyName,
-			prefix,
-			scope: newKeyScope,
-			createdAt: new Date().toISOString().split('T')[0],
-			lastUsedAt: 'Never'
-		});
-
-		newlyCreatedKey = fullKey;
-		newKeyName = '';
-		showCreateModal = false;
+	async function loadApiKeys() {
+		isLoading = true;
+		try {
+			const res = await fetch('/api/api-keys');
+			if (res.ok) {
+				const data = await res.json();
+				apiKeys = data.apiKeys || [];
+			}
+		} catch (err) {
+			console.error('Failed to load API keys', err);
+		} finally {
+			isLoading = false;
+		}
 	}
 
-	function handleRevoke(keyId: string) {
-		apiKeys = apiKeys.filter((k) => k.id !== keyId);
+	async function handleCreate() {
+		if (!newKeyName.trim()) return;
+		isCreating = true;
+		errorMessage = '';
+		try {
+			const res = await fetch('/api/api-keys', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: newKeyName, scope: newKeyScope })
+			});
+			const data = await res.json();
+			if (res.ok && data.success) {
+				newlyCreatedKey = data.rawKey;
+				newKeyName = '';
+				showCreateModal = false;
+				await loadApiKeys();
+			} else {
+				errorMessage = data.error || 'Failed to generate API key';
+			}
+		} catch {
+			errorMessage = 'Network error while generating API key';
+		} finally {
+			isCreating = false;
+		}
+	}
+
+	async function handleRevoke(keyId: string) {
+		if (!confirm('Are you sure you want to revoke this API key? Applications using it will immediately lose access.')) return;
+		try {
+			const res = await fetch(`/api/api-keys?id=${encodeURIComponent(keyId)}`, {
+				method: 'DELETE'
+			});
+			if (res.ok) {
+				apiKeys = apiKeys.filter((k) => k.id !== keyId);
+			}
+		} catch (err) {
+			console.error('Failed to revoke key', err);
+		}
 	}
 
 	function copyKey() {
@@ -55,140 +86,220 @@
 			setTimeout(() => (copied = false), 2000);
 		}
 	}
+
+	onMount(() => {
+		loadApiKeys();
+	});
 </script>
 
 <svelte:head>
-	<title>API Keys — Gravlytics</title>
+	<title>API Access Keys — Gravlytics</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 max-w-4xl">
-	<div class="flex items-center justify-between">
-		<div class="flex flex-col gap-1">
-			<h1 class="text-2xl font-bold tracking-tight text-white">API Keys & Tokens</h1>
-			<p class="text-sm text-muted-light">Programmatically ingest events or query analytics with scoped tokens</p>
+<div class="flex flex-col gap-4 max-w-4xl">
+	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+		<div class="flex flex-col">
+			<h1 class="text-lg font-bold tracking-tight text-heading">API Keys & Tokens</h1>
+			<p class="text-xs text-label">Scoped authentication tokens for external ingestion or query API integrations</p>
 		</div>
 		<button
 			onclick={() => (showCreateModal = true)}
-			class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90 active:scale-[0.98]"
+			class="flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors active:scale-[0.98] cursor-pointer"
 		>
-			+ Generate API Key
+			<Plus size={14} strokeWidth={2} />
+			<span>Generate API Key</span>
 		</button>
 	</div>
 
 	<!-- Navigation Tabs -->
-	<div class="flex items-center gap-2 border-b border-ink-border pb-3">
-		<a href="/settings" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">General</a>
-		<a href="/settings/sites" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">Sites</a>
-		<a href="/settings/team" class="rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-light hover:text-white">Team</a>
-		<a href="/settings/api-keys" class="rounded-lg bg-ink-lighter px-3.5 py-1.5 text-xs font-semibold text-white">API Keys</a>
+	<div class="flex items-center gap-1.5 border-b border-themed pb-2 text-xs overflow-x-auto no-scrollbar">
+		<a href="/settings/profile" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<User size={13} />
+			<span>Profile</span>
+		</a>
+		<a href="/settings" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Sliders size={13} />
+			<span>General</span>
+		</a>
+		<a href="/settings/sites" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Globe size={13} />
+			<span>Sites</span>
+		</a>
+		<a href="/settings/team" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
+			<Users size={13} />
+			<span>Team</span>
+		</a>
+		<a href="/settings/api-keys" class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white shadow-sm whitespace-nowrap shrink-0">
+			<Key size={13} />
+			<span>API Keys</span>
+		</a>
 	</div>
 
 	<!-- Newly created key banner -->
 	{#if newlyCreatedKey}
-		<div class="glass-card border-emerald-500/30 bg-emerald-500/10 p-5 flex flex-col gap-3">
+		<div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 flex flex-col gap-2.5">
 			<div class="flex items-center justify-between">
-				<h3 class="text-xs font-semibold text-emerald-400">Save Your API Key Now</h3>
-				<button onclick={() => (newlyCreatedKey = null)} class="text-muted hover:text-white text-xs">Dismiss</button>
+				<div class="flex items-center gap-2 text-emerald-400">
+					<ShieldCheck size={16} />
+					<h3 class="text-xs font-bold">Copy Your New API Secret Key</h3>
+				</div>
+				<button onclick={() => (newlyCreatedKey = null)} class="text-slate-400 hover:text-heading" aria-label="Dismiss">
+					<X size={14} />
+				</button>
 			</div>
-			<p class="text-xs text-muted-light">
-				This token won't be shown again. Store it securely in your secrets manager.
+			<p class="text-xs text-body">
+				This secret will only be shown once. Store it securely in your deployment environment secrets.
 			</p>
 			<div class="flex items-center gap-2">
-				<code class="flex-1 rounded-lg border border-ink-border bg-ink px-3 py-2 font-mono text-xs text-emerald-300">
+				<code class="flex-1 rounded-md border border-themed bg-code px-3 py-1.5 font-mono text-xs text-cyan-300 select-all">
 					{newlyCreatedKey}
 				</code>
 				<button
 					onclick={copyKey}
-					class="gradient-accent rounded-lg px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90"
+					class="flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
 				>
-					{copied ? '✓ Copied' : 'Copy'}
+					{#if copied}
+						<Check size={13} />
+						<span>Copied</span>
+					{:else}
+						<Copy size={13} />
+						<span>Copy</span>
+					{/if}
 				</button>
 			</div>
 		</div>
 	{/if}
 
 	<!-- Keys List -->
-	<div class="flex flex-col gap-3">
-		{#each apiKeys as key}
-			<div class="glass-card flex items-center justify-between p-5">
-				<div class="flex items-center gap-4">
-					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-lg">
-						🔑
-					</div>
-					<div>
-						<h3 class="text-sm font-semibold text-white">{key.name}</h3>
-						<div class="mt-0.5 flex items-center gap-2">
-							<code class="font-mono text-xs text-muted-light">{key.prefix}••••••••••••</code>
-							<span class="rounded bg-ink-lighter px-2 py-0.5 text-[10px] uppercase font-mono text-accent">
-								{key.scope}
-							</span>
+	{#if isLoading}
+		<div class="flex items-center justify-center py-12 text-label gap-2 card">
+			<Loader2 size={16} class="animate-spin text-indigo-500" />
+			<span class="text-xs">Loading API keys...</span>
+		</div>
+	{:else if apiKeys.length === 0}
+		<div class="flex flex-col items-center justify-center py-10 px-4 text-center card border-dashed">
+			<div class="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-400 mb-2">
+				<Key size={18} />
+			</div>
+			<h3 class="text-xs font-semibold text-heading">No API Keys Generated</h3>
+			<p class="text-xs text-label max-w-xs mt-1">
+				Generate an API key to authenticate external services, backend microservices, or ingestion scripts.
+			</p>
+			<button
+				onclick={() => (showCreateModal = true)}
+				class="mt-3.5 flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors cursor-pointer"
+			>
+				<Plus size={13} strokeWidth={2} />
+				<span>Generate Key</span>
+			</button>
+		</div>
+	{:else}
+		<div class="flex flex-col gap-2">
+			{#each apiKeys as key}
+				<div class="flex items-center justify-between card p-3.5 px-4 transition-colors hover:border-indigo-500/30">
+					<div class="flex items-center gap-3">
+						<div class="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+							<Key size={16} strokeWidth={1.75} />
+						</div>
+						<div>
+							<div class="flex items-center gap-2">
+								<h3 class="text-xs font-semibold text-heading">{key.name}</h3>
+								<span class="rounded px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+									{key.scope}
+								</span>
+								{#if key.siteDomain}
+									<span class="rounded px-1.5 py-0.5 text-[9px] font-mono text-label bg-canvas border border-themed">
+										{key.siteDomain}
+									</span>
+								{/if}
+							</div>
+							<p class="font-mono text-[11px] text-slate-400 mt-0.5">{key.prefix}_••••••••••••••••</p>
 						</div>
 					</div>
-				</div>
 
-				<div class="flex items-center gap-4">
-					<div class="hidden sm:flex flex-col items-end mr-3">
-						<span class="text-[11px] text-muted-light">Last used: {key.lastUsedAt}</span>
-						<span class="text-[10px] text-muted">Created {key.createdAt}</span>
+					<div class="flex items-center gap-4">
+						<div class="hidden sm:flex flex-col items-end">
+							<span class="font-mono text-[10px] text-hint">Last used: {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : 'Never'}</span>
+							<span class="font-mono text-[10px] text-slate-600">Created: {new Date(key.createdAt).toLocaleDateString()}</span>
+						</div>
+
+						<button
+							onclick={() => handleRevoke(key.id)}
+							class="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-500/10 hover:text-rose-400 transition-colors cursor-pointer"
+							title="Revoke Key"
+							aria-label="Revoke Key"
+						>
+							<Trash2 size={13} strokeWidth={1.75} />
+						</button>
 					</div>
-
-					<button
-						onclick={() => handleRevoke(key.id)}
-						class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20"
-					>
-						Revoke
-					</button>
 				</div>
-			</div>
-		{/each}
-	</div>
+			{/each}
+		</div>
+	{/if}
 
-	<!-- Create Modal -->
+	<!-- Create Key Modal -->
 	{#if showCreateModal}
 		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-			<div class="glass-card w-full max-w-md p-6 shadow-2xl flex flex-col gap-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-base font-semibold text-white">Generate API Key</h2>
-					<button onclick={() => (showCreateModal = false)} class="text-muted hover:text-white">✕</button>
+			<div class="w-full max-w-md card-modal p-5 flex flex-col gap-4">
+				<div class="flex items-center justify-between border-b border-themed pb-3">
+					<div class="flex items-center gap-2">
+						<Key size={16} class="text-indigo-400" />
+						<h2 class="text-sm font-bold text-heading">Generate API Key</h2>
+					</div>
+					<button onclick={() => (showCreateModal = false)} class="text-slate-400 hover:text-heading cursor-pointer" aria-label="Close">
+						<X size={16} />
+					</button>
 				</div>
+
+				{#if errorMessage}
+					<div class="p-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
+						<AlertCircle size={14} class="shrink-0" />
+						<span>{errorMessage}</span>
+					</div>
+				{/if}
 
 				<div class="flex flex-col gap-3">
 					<div>
-						<label for="key-name" class="mb-1.5 block text-xs font-medium text-muted-light">Key Name</label>
+						<label for="key-name" class="mb-1 block text-[11px] font-medium text-body">Key Name</label>
 						<input
 							id="key-name"
 							type="text"
 							bind:value={newKeyName}
-							placeholder="e.g., CI/CD Test Token"
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							placeholder="e.g. CLI or Staging Ingestion"
+							class="w-full rounded-md input-field px-3 py-1.5 text-xs"
 						/>
 					</div>
+
 					<div>
-						<label for="key-scope" class="mb-1.5 block text-xs font-medium text-muted-light">Key Scope</label>
+						<label for="key-scope" class="mb-1 block text-[11px] font-medium text-body">Access Scope</label>
 						<select
 							id="key-scope"
 							bind:value={newKeyScope}
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							class="w-full rounded-md input-solid px-3 py-1.5 text-xs focus:border-indigo-500"
 						>
-							<option value="all">All (Ingestion + Query)</option>
+							<option value="all">Full Access (Ingestion & Reporting Query)</option>
 							<option value="ingestion">Ingestion Only (Send events)</option>
-							<option value="query">Query Only (Read stats & aggregations)</option>
+							<option value="query">Query Only (Read stats & reports)</option>
 						</select>
 					</div>
 				</div>
 
-				<div class="mt-2 flex justify-end gap-2">
+				<div class="mt-2 flex justify-end gap-2 border-t border-themed pt-3">
 					<button
 						onclick={() => (showCreateModal = false)}
-						class="rounded-lg px-4 py-2 text-xs font-medium text-muted-light hover:bg-ink-lighter"
+						class="rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-heading cursor-pointer"
 					>
 						Cancel
 					</button>
 					<button
 						onclick={handleCreate}
-						class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90"
+						disabled={isCreating}
+						class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors disabled:opacity-60 cursor-pointer"
 					>
-						Create Key
+						{#if isCreating}
+							<Loader2 size={13} class="animate-spin" />
+						{/if}
+						<span>Generate Key</span>
 					</button>
 				</div>
 			</div>

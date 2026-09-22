@@ -2,8 +2,15 @@
 	import type { Snippet } from 'svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import { siteStore } from '$lib/stores/site.svelte';
 
-	let { children }: { children: Snippet } = $props();
+	let { data, children }: { data: any; children: Snippet } = $props();
+
+	$effect(() => {
+		if (data?.sites) {
+			siteStore.setSites(data.sites);
+		}
+	});
 
 	let sidebarCollapsed = $state(false);
 </script>

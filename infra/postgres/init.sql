@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ── Enum types ──
-CREATE TYPE user_role AS ENUM ('owner', 'editor', 'viewer');
+CREATE TYPE user_role AS ENUM ('owner', 'admin', 'editor', 'viewer');
 CREATE TYPE auth_provider AS ENUM ('email', 'google', 'github');
 CREATE TYPE api_key_scope AS ENUM ('ingestion', 'query', 'all');
 
@@ -52,6 +52,22 @@ CREATE TABLE IF NOT EXISTS memberships (
 
 CREATE INDEX idx_memberships_user ON memberships(user_id);
 CREATE INDEX idx_memberships_org ON memberships(org_id);
+
+-- ── Invitations ──
+CREATE TABLE IF NOT EXISTS invitations (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    inviter_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email           VARCHAR(255) NOT NULL,
+    role            user_role NOT NULL DEFAULT 'viewer',
+    token           VARCHAR(255) NOT NULL UNIQUE,
+    status          VARCHAR(50) NOT NULL DEFAULT 'pending',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX idx_invitations_org ON invitations(org_id);
+CREATE INDEX idx_invitations_token ON invitations(token);
 
 -- ── Sites ──
 CREATE TABLE IF NOT EXISTS sites (

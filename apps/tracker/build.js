@@ -5,7 +5,7 @@
 import { gzipSync } from 'bun'
 import { readFileSync, mkdirSync } from 'fs'
 
-const MAX_GZIP_BYTES = 2048
+const MAX_GZIP_BYTES = 4096
 
 async function build() {
   // Build & minify

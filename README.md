@@ -22,11 +22,10 @@ podman compose up -d
 ```
 
 Ini akan menjalankan:
-- **ClickHouse** (port 8123/9000) — event store
+- **ClickHouse** (port 8123/9009) — event store
 - **PostgreSQL** (port 5432) — metadata store
 - **Redpanda** (port 19092) — streaming buffer
 - **Valkey** (port 6379) — cache layer
-- **Redpanda Console** (port 8080) — monitoring UI
 
 ### 2. Start Backend Services
 

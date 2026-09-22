@@ -147,10 +147,247 @@ func (h *Handler) Realtime(w http.ResponseWriter, r *http.Request) {
 		count = int64(chCount)
 	}
 
+	paths, _ := h.ch.QueryRealtimePaths(r.Context(), siteID, 5)
+	if paths == nil {
+		paths = []chclient.RealtimePath{}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int64{
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"active_visitors": count,
+		"active_paths":    paths,
 	})
+}
+
+// Goals calculates conversion metrics for defined goals
+func (h *Handler) Goals(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var goals []chclient.GoalDef
+	if r.Method == http.MethodPost && r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&goals)
+	}
+
+	if len(goals) == 0 {
+		goals = []chclient.GoalDef{
+			{ID: "goal-1", Name: "Newsletter Subscription", Type: "event", Trigger: "signup"},
+			{ID: "goal-2", Name: "Pricing Page Visit", Type: "pageview", Trigger: "/pricing"},
+			{ID: "goal-3", Name: "Documentation Reader", Type: "pageview", Trigger: "/docs/*"},
+			{ID: "goal-4", Name: "SDK Download", Type: "event", Trigger: "download_sdk"},
+		}
+	}
+
+	results, err := h.ch.QueryGoals(r.Context(), siteID, from, to, goals)
+	if err != nil {
+		h.logger.Error("query goals failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
+// Funnel returns multi-step funnel progression
+func (h *Handler) Funnel(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var steps []map[string]string
+	if r.Method == http.MethodPost && r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&steps)
+	}
+
+	results, err := h.ch.QueryFunnel(r.Context(), siteID, from, to, steps)
+	if err != nil {
+		h.logger.Error("query funnel failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
+// Retention returns weekly cohort retention table
+func (h *Handler) Retention(w http.ResponseWriter, r *http.Request) {
+	siteIDStr := r.URL.Query().Get("site_id")
+	if siteIDStr == "" {
+		http.Error(w, "missing site_id", http.StatusBadRequest)
+		return
+	}
+	granularity := r.URL.Query().Get("granularity")
+	if granularity == "" {
+		granularity = "week"
+	}
+
+	siteID := hashSiteID(siteIDStr)
+	cohorts, err := h.ch.QueryRetention(r.Context(), siteID, granularity)
+	if err != nil {
+		h.logger.Error("query retention failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cohorts)
+}
+
+// Sessions returns comprehensive session metrics, distribution, and recent sessions
+func (h *Handler) Sessions(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	limit := 30
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	cacheKey := fmt.Sprintf("sessions:%d:%s:%s:%d", siteID, from.Format("20060102"), to.Format("20060102"), limit)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QuerySessions(r.Context(), siteID, from, to, limit)
+	if err != nil {
+		h.logger.Error("query sessions failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 15*time.Second)
+}
+
+// Events returns events overview, distinct events list, and recent event stream
+func (h *Handler) Events(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	cacheKey := fmt.Sprintf("events:%d:%s:%s:%d", siteID, from.Format("20060102"), to.Format("20060102"), limit)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryEvents(r.Context(), siteID, from, to, limit)
+	if err != nil {
+		h.logger.Error("query events failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 15*time.Second)
+}
+
+// EventProperties returns property keys and top values for a specific event
+func (h *Handler) EventProperties(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	eventName := r.URL.Query().Get("event_name")
+	if eventName == "" {
+		http.Error(w, "missing event_name parameter", http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("event_props:%d:%s:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"), eventName)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	items, err := h.ch.QueryEventProperties(r.Context(), siteID, eventName, from, to)
+	if err != nil {
+		h.logger.Error("query event properties failed", "error", err, "event_name", eventName)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, items, 30*time.Second)
+}
+
+// Vitals returns Core Web Vitals summary and slowest pages
+func (h *Handler) Vitals(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("vitals:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryVitals(r.Context(), siteID, from, to)
+	if err != nil {
+		h.logger.Error("query vitals failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
+}
+
+// Ads returns ad inventory, fill rate, and viewability statistics
+func (h *Handler) Ads(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("ads:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryAds(r.Context(), siteID, from, to)
+	if err != nil {
+		h.logger.Error("query ads failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
 }
 
 // parseParams extracts common query parameters

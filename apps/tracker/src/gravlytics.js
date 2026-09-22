@@ -1,22 +1,44 @@
 /**
- * Gravlytics — Lightweight web analytics tracker
- * Privacy-first, cookieless, < 2 KB gzip
+ * Gravlytics — Lightweight web analytics & telemetry tracker
+ * Privacy-first, cookieless, high-performance
  *
- * Usage:
- *   <script defer data-site-id="YOUR_SITE_ID" src="https://your-domain/gravlytics.js"></script>
- *
- * Custom events:
- *   gravlytics.track('signup', { plan: 'pro' })
+ * Supported features:
+ *   1. Auto Pageview (SPA History API support)
+ *   2. Client-Side Anti-Bot & Anti-DDoS Ingestion Guard
+ *   3. Core Web Vitals Monitoring (LCP, CLS, INP, TTFB, FCP)
+ *   4. Ad Viewability (IAB 50% 1s standard) & Fill Rate Tracking
+ *   5. HTML Data Attributes & JavaScript API
+ *   6. Google Analytics dataLayer & gtag compatibility
  */
 ;(function () {
   'use strict'
 
-  // Respect Do Not Track
+  // Respect Do Not Track / Global Privacy Control
   if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl) return
+
+  // Anti-Bot: Drop automated browsers, headless environments & scrapers before any network calls
+  if (
+    navigator.webdriver ||
+    window._phantom ||
+    window.__nightmare ||
+    window.callPhantom ||
+    (navigator.userAgent && /bot|crawler|spider|crawling|headless|scrape|slurp/i.test(navigator.userAgent))
+  ) {
+    return
+  }
 
   var script = document.currentScript
   var siteId = script && script.getAttribute('data-site-id')
   if (!siteId) return
+
+  // Optional domain filter (e.g. data-domains="example.com,app.example.com")
+  var domains = script.getAttribute('data-domains')
+  if (domains) {
+    var domainList = domains.split(',').map(function (d) { return d.trim() })
+    if (domainList.indexOf(location.hostname) === -1) return
+  }
+
+  var autoTrack = script.getAttribute('data-auto-track') !== 'false'
 
   var endpoint =
     (script.getAttribute('data-api') || script.src.replace(/\/[^/]*$/, '')) +
@@ -29,32 +51,93 @@
   // Screen width
   var sw = window.screen ? window.screen.width : 0
 
-  // Send event
-  function send(name, props) {
+  // Anti-DDoS client-side leaky bucket (max 12 events per 5s window, max 60 per minute per tab)
+  var recentEvents = []
+  function isRateLimited() {
+    var now = Date.now()
+    recentEvents = recentEvents.filter(function (t) { return now - t < 60000 })
+    var shortWindow = recentEvents.filter(function (t) { return now - t < 5000 })
+    if (shortWindow.length >= 12 || recentEvents.length >= 60) {
+      return true
+    }
+    recentEvents.push(now)
+    return false
+  }
+
+  // Helper to build base payload
+  function getBasePayload(name) {
+    var tz = ''
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch (e) {}
+    var lang = navigator.language || ''
+
     var payload = {
-      s: siteId,           // site_id
-      n: name,             // event_name
-      u: location.pathname,// url_path
-      h: location.hostname,// hostname
-      r: document.referrer,// referrer
-      w: sw,               // screen_width
-      t: tabId,            // tab session identifier
+      s: siteId,            // site_id
+      n: name || 'pageview',// event_name
+      u: location.pathname, // url_path
+      h: location.hostname, // hostname
+      r: document.referrer, // referrer
+      w: sw,                // screen_width
+      t: tabId,             // tab session identifier
+      tz: tz,               // timezone e.g. Asia/Jakarta
+      l: lang,              // locale e.g. id-ID
     }
 
-    // UTM params from URL (only on first pageview)
-    if (name === 'pageview') {
-      var params = new URLSearchParams(location.search)
-      var us = params.get('utm_source')
-      var um = params.get('utm_medium')
-      var uc = params.get('utm_campaign')
-      if (us) payload.us = us
-      if (um) payload.um = um
-      if (uc) payload.uc = uc
+    // UTM params on pageviews
+    if (payload.n === 'pageview') {
+      try {
+        var params = new URLSearchParams(location.search)
+        var us = params.get('utm_source')
+        var um = params.get('utm_medium')
+        var uc = params.get('utm_campaign')
+        if (us) payload.us = us
+        if (um) payload.um = um
+        if (uc) payload.uc = uc
+      } catch (e) {}
     }
 
-    // Custom properties
-    if (props && typeof props === 'object') {
-      payload.p = props
+    return payload
+  }
+
+  // Page-level metadata from dataLayer
+  var pageProps = {}
+
+  function extractProps(obj) {
+    var props = {}
+    for (var k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k) && k !== 'event') {
+        props[k] = typeof obj[k] === 'object' ? JSON.stringify(obj[k]) : String(obj[k])
+      }
+    }
+    return props
+  }
+
+  // Send event with anti-DDoS rate-limiting protection
+  function send(name, props) {
+    if (isRateLimited()) return
+
+    var payload
+
+    // Support functional tracker: track((defaultProps) => ...)
+    if (typeof name === 'function') {
+      var defaultProps = getBasePayload('custom')
+      var res = name(defaultProps)
+      if (typeof res === 'string') {
+        payload = getBasePayload(res)
+      } else if (res && typeof res === 'object') {
+        payload = Object.assign(defaultProps, res)
+      } else {
+        return
+      }
+    } else if (typeof name === 'object' && name !== null) {
+      payload = Object.assign(getBasePayload(name.name || 'pageview'), name)
+    } else {
+      payload = getBasePayload(name || 'pageview')
+    }
+
+    // Merge page-level dataLayer metadata with event-specific props
+    var mergedProps = Object.assign({}, pageProps, props || {})
+    if (Object.keys(mergedProps).length > 0) {
+      payload.p = mergedProps
     }
 
     var data = JSON.stringify(payload)
@@ -82,18 +165,404 @@
   if (pushState) {
     history.pushState = function () {
       pushState.apply(history, arguments)
-      page()
+      if (autoTrack) page()
     }
   }
-  window.addEventListener('popstate', page)
+  window.addEventListener('popstate', function () {
+    if (autoTrack) page()
+  })
 
-  // ── Public API ──
-  window.gravlytics = {
-    track: function (name, props) {
-      if (name) send(name, props)
+  // ── HTML Data Attribute Event Tracking ──
+  document.addEventListener(
+    'click',
+    function (e) {
+      var target = e.target
+      if (!target || !target.closest) return
+
+      var el = target.closest(
+        '[data-gravlytics-event],[data-umami-event],[data-event]'
+      )
+      if (!el) return
+
+      var eventName =
+        el.getAttribute('data-gravlytics-event') ||
+        el.getAttribute('data-umami-event') ||
+        el.getAttribute('data-event')
+
+      if (!eventName) return
+
+      var props = {}
+      var attrs = el.attributes
+      for (var i = 0; i < attrs.length; i++) {
+        var attr = attrs[i]
+        var attrName = attr.name
+        var propKey = null
+
+        if (attrName.indexOf('data-gravlytics-event-') === 0) {
+          propKey = attrName.substring(22)
+        } else if (attrName.indexOf('data-umami-event-') === 0) {
+          propKey = attrName.substring(17)
+        } else if (attrName.indexOf('data-prop-') === 0) {
+          propKey = attrName.substring(10)
+        }
+
+        if (propKey) {
+          props[propKey] = attr.value
+        }
+      }
+
+      send(eventName, props)
     },
+    true
+  )
+
+  // ── Google Analytics dataLayer & gtag Interception ──
+  function handleDataLayerItem(item) {
+    if (!item) return
+
+    if (typeof item === 'object' && item !== null && item.event && typeof item.event === 'string') {
+      if (!/^gtm\./.test(item.event)) {
+        var props = extractProps(item)
+        send(item.event, props)
+      }
+    } else if (typeof item === 'object' && item !== null && !Array.isArray(item) && !item.event) {
+      var extracted = extractProps(item)
+      Object.assign(pageProps, extracted)
+    } else if (
+      (Array.isArray(item) || (typeof item === 'object' && '0' in item)) &&
+      item[0] === 'event' &&
+      typeof item[1] === 'string'
+    ) {
+      var evtName = item[1]
+      var evtProps = item[2] || {}
+      var propsObj = typeof evtProps === 'object' ? extractProps(evtProps) : {}
+      send(evtName, propsObj)
+    } else if (
+      (Array.isArray(item) || (typeof item === 'object' && '0' in item)) &&
+      (item[0] === 'set' || item[0] === 'config')
+    ) {
+      var cfg = typeof item[1] === 'object' ? item[1] : (typeof item[2] === 'object' ? item[2] : null)
+      if (cfg) {
+        Object.assign(pageProps, extractProps(cfg))
+      }
+    }
   }
 
-  // ── Initial pageview ──
-  page()
+  window.dataLayer = window.dataLayer || []
+  if (Array.isArray(window.dataLayer)) {
+    for (var d = 0; d < window.dataLayer.length; d++) {
+      handleDataLayerItem(window.dataLayer[d])
+    }
+  }
+
+  var origPush = window.dataLayer.push
+  window.dataLayer.push = function () {
+    for (var a = 0; a < arguments.length; a++) {
+      handleDataLayerItem(arguments[a])
+    }
+    return origPush ? origPush.apply(window.dataLayer, arguments) : arguments.length
+  }
+
+  if (typeof window.gtag !== 'function') {
+    window.gtag = function () {
+      window.dataLayer.push(arguments)
+    }
+  }
+
+  // ── Core Web Vitals (LCP, CLS, INP, TTFB, FCP) Telemetry ──
+  var vitals = { lcp: 0, cls: 0, inp: 0, ttfb: 0, fcp: 0 }
+  var lastReportedVitals = { lcp: 0, cls: 0, inp: 0, ttfb: 0, fcp: 0 }
+
+  function getVitalRating(metric, val) {
+    if (metric === 'lcp') return val <= 2500 ? 'good' : val <= 4000 ? 'needs-improvement' : 'poor'
+    if (metric === 'cls') return val <= 0.1 ? 'good' : val <= 0.25 ? 'needs-improvement' : 'poor'
+    if (metric === 'inp') return val <= 200 ? 'good' : val <= 500 ? 'needs-improvement' : 'poor'
+    if (metric === 'fcp') return val <= 1800 ? 'good' : val <= 3000 ? 'needs-improvement' : 'poor'
+    if (metric === 'ttfb') return val <= 800 ? 'good' : val <= 1800 ? 'needs-improvement' : 'poor'
+    return 'good'
+  }
+
+  function reportVitals(force) {
+    try {
+      if (performance.getEntriesByType) {
+        var nav = performance.getEntriesByType('navigation')[0]
+        if (nav && nav.responseStart) {
+          vitals.ttfb = Math.round(nav.responseStart)
+        }
+        var paints = performance.getEntriesByType('paint')
+        if (paints) {
+          for (var i = 0; i < paints.length; i++) {
+            if (paints[i].name === 'first-contentful-paint') {
+              vitals.fcp = Math.round(paints[i].startTime)
+            }
+          }
+        }
+      }
+    } catch (e) {}
+
+    if (vitals.lcp > 0 || vitals.fcp > 0 || vitals.ttfb > 0) {
+      var changed = (
+        vitals.lcp !== lastReportedVitals.lcp ||
+        vitals.cls !== lastReportedVitals.cls ||
+        vitals.inp !== lastReportedVitals.inp ||
+        vitals.ttfb !== lastReportedVitals.ttfb ||
+        vitals.fcp !== lastReportedVitals.fcp
+      )
+      if (changed || force) {
+        lastReportedVitals = { lcp: vitals.lcp, cls: vitals.cls, inp: vitals.inp, ttfb: vitals.ttfb, fcp: vitals.fcp }
+        send('vitals', {
+          lcp: String(vitals.lcp),
+          lcp_rating: getVitalRating('lcp', vitals.lcp),
+          cls: String(vitals.cls.toFixed(3)),
+          cls_rating: getVitalRating('cls', vitals.cls),
+          inp: String(vitals.inp),
+          inp_rating: getVitalRating('inp', vitals.inp),
+          ttfb: String(vitals.ttfb),
+          ttfb_rating: getVitalRating('ttfb', vitals.ttfb),
+          fcp: String(vitals.fcp),
+          fcp_rating: getVitalRating('fcp', vitals.fcp)
+        })
+      }
+    }
+  }
+
+  if (typeof PerformanceObserver !== 'undefined') {
+    try {
+      var lcpObserver = new PerformanceObserver(function (entryList) {
+        var entries = entryList.getEntries()
+        var lastEntry = entries[entries.length - 1]
+        if (lastEntry) vitals.lcp = Math.round(lastEntry.startTime)
+      })
+      lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true })
+
+      var clsObserver = new PerformanceObserver(function (entryList) {
+        var entries = entryList.getEntries()
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].hadRecentInput) {
+            vitals.cls += entries[i].value
+          }
+        }
+      })
+      clsObserver.observe({ type: 'layout-shift', buffered: true })
+
+      var inpObserver = new PerformanceObserver(function (entryList) {
+        var entries = entryList.getEntries()
+        for (var i = 0; i < entries.length; i++) {
+          var dur = Math.round(entries[i].duration || entries[i].processingEnd - entries[i].startTime || 0)
+          if (dur > vitals.inp) vitals.inp = dur
+        }
+      })
+      inpObserver.observe({ type: 'first-input', buffered: true })
+    } catch (e) {}
+  }
+
+  // Auto-send initial vitals after load or 3.5s
+  setTimeout(function () { reportVitals(false) }, 3500)
+  if (window.addEventListener) {
+    window.addEventListener('load', function () {
+      setTimeout(function () { reportVitals(false) }, 2000)
+    })
+    window.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') reportVitals(true)
+    })
+    window.addEventListener('pagehide', function () { reportVitals(true) })
+    window.addEventListener('beforeunload', function () { reportVitals(true) })
+  }
+
+  // ── Ad Viewability & Fill Rate (IAB: 50% for 1s+ & GPT Integration) ──
+  var requestedAds = {}
+  var filledAds = {}
+  var viewedAds = {}
+  var adTimers = {}
+
+  // Google Publisher Tag (GPT / googletag) Auto-Integration
+  try {
+    if (typeof window !== 'undefined') {
+      window.googletag = window.googletag || { cmd: [] }
+      window.googletag.cmd.push(function () {
+        try {
+          var pubads = window.googletag.pubads()
+          if (pubads && pubads.addEventListener) {
+            pubads.addEventListener('slotRequested', function (e) {
+              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              requestedAds[id] = true
+              send('ad_request', { slot_id: id, unit: (e.slot && e.slot.getAdUnitPath) ? e.slot.getAdUnitPath() : '' })
+            })
+            pubads.addEventListener('slotResponseReceived', function (e) {
+              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              send('ad_fill', { slot_id: id })
+            })
+            pubads.addEventListener('slotRenderEnded', function (e) {
+              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              if (!e.isEmpty) {
+                filledAds[id] = true
+                var sz = e.size ? (Array.isArray(e.size) ? e.size.join('x') : String(e.size)) : ''
+                send('ad_impression', { slot_id: id, size: sz })
+              } else {
+                send('ad_empty', { slot_id: id })
+              }
+            })
+            pubads.addEventListener('impressionViewable', function (e) {
+              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              viewedAds[id] = true
+              send('ad_viewable', { slot_id: id, viewable: '1' })
+            })
+          }
+        } catch (err) {}
+      })
+    }
+  } catch (gptErr) {}
+
+  function initAdObserver() {
+    var observer = null
+    if (typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver(
+        function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            var entry = entries[i]
+            var el = entry.target
+            var slotId =
+              el.getAttribute('data-gravlytics-ad') ||
+              el.getAttribute('data-ad-slot') ||
+              el.id ||
+              'ad_slot'
+
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+              if (!viewedAds[slotId] && !adTimers[slotId]) {
+                adTimers[slotId] = setTimeout(function () {
+                  viewedAds[slotId] = true
+                  delete adTimers[slotId]
+                  send('ad_viewable', {
+                    slot_id: slotId,
+                    duration_ms: '1000',
+                    viewable: '1'
+                  })
+                }, 1000)
+              }
+            } else {
+              if (adTimers[slotId]) {
+                clearTimeout(adTimers[slotId])
+                delete adTimers[slotId]
+              }
+            }
+          }
+        },
+        { threshold: [0.5] }
+      )
+    }
+
+    function observeElement(el) {
+      if (!el || el._gly_observed) return
+      el._gly_observed = true
+
+      var slotId =
+        el.getAttribute('data-gravlytics-ad') ||
+        el.getAttribute('data-ad-slot') ||
+        el.id ||
+        'ad_slot'
+
+      // Send initial ad_request if not already sent by GPT
+      if (!requestedAds[slotId]) {
+        requestedAds[slotId] = true
+        send('ad_request', { slot_id: slotId })
+      }
+
+      // Check for content/iframe to record fill + impression
+      if (!filledAds[slotId]) {
+        var hasContent = el.querySelector('iframe, img, ins, .ad-banner__core') || el.clientHeight > 20
+        if (hasContent) {
+          filledAds[slotId] = true
+          send('ad_fill', { slot_id: slotId })
+          send('ad_impression', { slot_id: slotId, filled: '1' })
+        }
+      }
+
+      // Attach click tracking
+      el.addEventListener('click', function () {
+        send('ad_click', { slot_id: slotId })
+      })
+
+      if (observer) {
+        observer.observe(el)
+      }
+    }
+
+    function observeAdSlots() {
+      var adElements = document.querySelectorAll(
+        '[data-gravlytics-ad],[data-ad-slot],.ad-slot,.ad-banner,[id^="div-gpt-ad"],ins.adsbygoogle'
+      )
+      for (var j = 0; j < adElements.length; j++) {
+        observeElement(adElements[j])
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', observeAdSlots)
+    } else {
+      observeAdSlots()
+    }
+
+    // Dynamic DOM mutation watcher for client-side injected ads
+    if (typeof MutationObserver !== 'undefined' && document.body) {
+      var mutObs = new MutationObserver(function () {
+        observeAdSlots()
+      })
+      mutObs.observe(document.body, { childList: true, subtree: true })
+    }
+
+    return {
+      observe: function (el, slotId) {
+        if (el) {
+          if (slotId) el.setAttribute('data-gravlytics-ad', slotId)
+          observeElement(el)
+        }
+      },
+      request: function (slotId, props) {
+        send('ad_request', Object.assign({ slot_id: slotId }, props || {}))
+      },
+      impression: function (slotId, props) {
+        send('ad_impression', Object.assign({ slot_id: slotId, filled: '1' }, props || {}))
+      },
+      fill: function (slotId, props) {
+        send('ad_fill', Object.assign({ slot_id: slotId, filled: '1' }, props || {}))
+      },
+      empty: function (slotId, props) {
+        send('ad_empty', Object.assign({ slot_id: slotId, filled: '0' }, props || {}))
+      },
+      viewable: function (slotId, props) {
+        send('ad_viewable', Object.assign({ slot_id: slotId, viewable: '1' }, props || {}))
+      },
+      click: function (slotId, props) {
+        send('ad_click', Object.assign({ slot_id: slotId }, props || {}))
+      }
+    }
+  }
+
+  var adApi = initAdObserver()
+
+  // ── Public API (Universal Umami + Gravlytics + Ad API) ──
+  var tracker = {
+    track: function (name, props) {
+      if (!name) {
+        page()
+      } else {
+        send(name, props)
+      }
+    },
+    identify: function (userId, props) {
+      var p = props || {}
+      if (userId) p.user_id = String(userId)
+      send('identify', p)
+    },
+    page: page,
+    ad: adApi
+  }
+
+  window.gravlytics = tracker
+  window.umami = tracker
+
+  // Initial pageview
+  if (autoTrack) {
+    page()
+  }
 })()

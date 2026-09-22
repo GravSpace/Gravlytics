@@ -18,5 +18,16 @@ export default defineConfig({
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter()
 		})
-	]
+	],
+	ssr: {
+		noExternal: ['@lucide/svelte']
+	},
+	server: {
+		host: true,
+		allowedHosts: true
+	},
+	preview: {
+		host: true,
+		allowedHosts: true
+	}
 });

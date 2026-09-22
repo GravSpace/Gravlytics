@@ -10,12 +10,17 @@ declare global {
 				name: string;
 				avatarUrl?: string;
 				createdAt: string;
+				role?: 'Owner' | 'Admin' | 'Editor' | 'Viewer';
 			};
 		}
 		// interface PageData {}
 		// interface PageState {}
 		// interface Platform {}
 	}
+}
+
+declare module 'bun' {
+	export const SQL: any;
 }
 
 export {};

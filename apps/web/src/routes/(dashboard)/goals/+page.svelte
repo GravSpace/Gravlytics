@@ -1,223 +1,369 @@
 <script lang="ts">
-	let goals = $state([
-		{
-			id: 'goal-1',
-			name: 'Newsletter Subscription',
-			type: 'event',
-			trigger: 'signup',
-			conversions: 1420,
-			conversionRate: 8.6,
-			trend: 14.2
-		},
-		{
-			id: 'goal-2',
-			name: 'Pricing Page Visit',
-			type: 'pageview',
-			trigger: '/pricing',
-			conversions: 4910,
-			conversionRate: 29.8,
-			trend: 5.4
-		},
-		{
-			id: 'goal-3',
-			name: 'Documentation Reader',
-			type: 'pageview',
-			trigger: '/docs/*',
-			conversions: 7120,
-			conversionRate: 43.1,
-			trend: -2.1
-		},
-		{
-			id: 'goal-4',
-			name: 'SDK Download',
-			type: 'event',
-			trigger: 'download_sdk',
-			conversions: 620,
-			conversionRate: 3.8,
-			trend: 22.5
-		}
-	]);
+	import { onMount, untrack } from 'svelte';
+	import { Target, Plus, Trash2, CheckCircle2, X, Code2, Globe, Sparkles, AlertCircle, RefreshCw } from '@lucide/svelte';
+	import { getSavedGoals, saveGoal, deleteGoal, fetchGoals, fetchBreakdown, type GoalItem } from '$lib/api';
+	import { siteStore } from '$lib/stores/site.svelte';
+
+	let goals = $state<GoalItem[]>([]);
+	let isLoading = $state(true);
+	let isSaving = $state(false);
 
 	let showAddModal = $state(false);
 	let newGoalName = $state('');
-	let newGoalType = $state('event');
+	let newGoalType = $state<'event' | 'pageview'>('pageview');
 	let newGoalTrigger = $state('');
 
-	function handleAddGoal() {
-		if (!newGoalName || !newGoalTrigger) return;
-		goals.push({
-			id: 'goal_' + Math.random().toString(36).substring(2, 8),
-			name: newGoalName,
-			type: newGoalType,
-			trigger: newGoalTrigger,
-			conversions: 0,
-			conversionRate: 0,
-			trend: 0
-		});
-		newGoalName = '';
-		newGoalTrigger = '';
-		showAddModal = false;
+	// Detected real paths and events for suggestions
+	let detectedPaths = $state<string[]>([]);
+	let detectedEvents = $state<string[]>([]);
+
+	const totalConversions = $derived(goals.reduce((acc, g) => acc + g.conversions, 0));
+	const avgConversionRate = $derived(
+		goals.length > 0 ? (goals.reduce((acc, g) => acc + g.conversionRate, 0) / goals.length).toFixed(1) : '0.0'
+	);
+	const topGoal = $derived(
+		goals.length > 0 && totalConversions > 0
+			? [...goals].sort((a, b) => b.conversions - a.conversions)[0]
+			: null
+	);
+
+	async function loadSuggestedTriggers() {
+		try {
+			const paths = await fetchBreakdown(siteStore.activeSiteId, 'url_path', undefined, undefined, 10);
+			detectedPaths = paths.map((p) => p.label).filter((p) => p && !p.includes('(unknown)'));
+			
+			const events = await fetchBreakdown(siteStore.activeSiteId, 'event_name', undefined, undefined, 10);
+			detectedEvents = events.map((e) => e.label).filter((e) => e && !e.includes('(unknown)'));
+		} catch (err) {
+			console.error('Failed to load suggested triggers', err);
+		}
 	}
 
-	function handleDeleteGoal(id: string) {
-		goals = goals.filter((g) => g.id !== id);
+	async function loadGoals() {
+		try {
+			const saved = await getSavedGoals(siteStore.activeSiteId);
+			if (saved.length > 0) {
+				const metrics = await fetchGoals(siteStore.activeSiteId, saved);
+				if (Array.isArray(metrics) && metrics.length > 0) {
+					goals = metrics;
+				} else {
+					goals = saved;
+				}
+			} else {
+				goals = [];
+			}
+		} catch (err) {
+			console.error('Failed to load goals', err);
+		} finally {
+			isLoading = false;
+		}
 	}
+
+	async function handleAddGoal() {
+		if (!newGoalName || !newGoalTrigger || isSaving) return;
+		isSaving = true;
+		try {
+			const created = await saveGoal(siteStore.activeSiteId, {
+				name: newGoalName,
+				type: newGoalType,
+				trigger: newGoalTrigger
+			});
+			if (created) {
+				newGoalName = '';
+				newGoalTrigger = '';
+				showAddModal = false;
+				await loadGoals();
+			}
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	async function handleDeleteGoal(id: string) {
+		await deleteGoal(id);
+		goals = goals.filter((g) => g.id !== id);
+		await loadGoals();
+	}
+
+	async function addStarterGoal(name: string, type: 'pageview' | 'event', trigger: string) {
+		await saveGoal(siteStore.activeSiteId, { name, type, trigger });
+		await loadGoals();
+	}
+
+	let lastSiteId = '';
+	// Reactively re-load when active site changes
+	$effect(() => {
+		const current = siteStore.activeSiteId;
+		if (current && current !== lastSiteId) {
+			lastSiteId = current;
+			untrack(() => {
+				loadGoals();
+				loadSuggestedTriggers();
+			});
+		}
+	});
+
+	onMount(() => {
+		const interval = setInterval(() => {
+			loadGoals();
+		}, 15000);
+		return () => clearInterval(interval);
+	});
 </script>
 
 <svelte:head>
 	<title>Goals & Conversions — Gravlytics</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6">
-	<div class="flex items-center justify-between">
-		<div class="flex flex-col gap-1">
-			<h1 class="text-2xl font-bold tracking-tight text-white">Goals & Conversions</h1>
-			<p class="text-sm text-muted-light">Define target events or key landing pages to measure conversion rates</p>
+<div class="flex flex-col gap-4">
+	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+		<div class="flex flex-col">
+			<h1 class="text-lg font-bold tracking-tight text-heading">Goals & Conversions</h1>
+			<p class="text-xs text-label">
+				Define conversion milestones, custom trigger events, and inspect real-time conversions for
+				<span class="font-mono text-indigo-400 font-semibold">{siteStore.activeSiteId}</span>
+			</p>
 		</div>
 		<button
 			onclick={() => (showAddModal = true)}
-			class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90 active:scale-[0.98]"
+			class="flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors active:scale-[0.98]"
 		>
-			+ Define New Goal
+			<Plus size={14} strokeWidth={2} />
+			<span>Define New Goal</span>
 		</button>
 	</div>
 
 	<!-- Goals Overview Cards -->
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		<div class="kpi-card p-4">
-			<span class="text-xs text-muted-light">Active Goals</span>
-			<span class="text-2xl font-bold text-white mt-1">{goals.length}</span>
-			<span class="text-[11px] text-accent mt-0.5">Tracking live</span>
+	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+		<div class="flex flex-col card-inset p-3.5">
+			<span class="text-[11px] font-semibold uppercase tracking-wider text-label">Active Goals</span>
+			<span class="font-mono text-2xl font-bold text-heading mt-1">{goals.length}</span>
+			<span class="text-[10px] text-indigo-400 mt-0.5">Configured Goals</span>
 		</div>
-		<div class="kpi-card p-4">
-			<span class="text-xs text-muted-light">Total Conversions</span>
-			<span class="text-2xl font-bold text-white mt-1">14,070</span>
-			<span class="text-[11px] text-emerald-400 mt-0.5">↑ 12.3% this month</span>
+		<div class="flex flex-col card-inset p-3.5">
+			<span class="text-[11px] font-semibold uppercase tracking-wider text-label">Total Conversions</span>
+			<span class="font-mono text-2xl font-bold text-emerald-400 mt-1">{totalConversions.toLocaleString()}</span>
+			<span class="text-[10px] text-slate-500 mt-0.5">Tracked event triggers</span>
 		</div>
-		<div class="kpi-card p-4">
-			<span class="text-xs text-muted-light">Avg. Conversion Rate</span>
-			<span class="text-2xl font-bold text-white mt-1">21.3%</span>
-			<span class="text-[11px] text-emerald-400 mt-0.5">↑ 3.2% vs last period</span>
+		<div class="flex flex-col card-inset p-3.5">
+			<span class="text-[11px] font-semibold uppercase tracking-wider text-label">Avg. Conversion Rate</span>
+			<span class="font-mono text-2xl font-bold text-heading mt-1">{avgConversionRate}%</span>
+			<span class="text-[10px] font-mono text-slate-500 mt-0.5">Relative to unique visitors</span>
 		</div>
-		<div class="kpi-card p-4">
-			<span class="text-xs text-muted-light">Top Goal</span>
-			<span class="text-2xl font-bold text-white mt-1">Pricing</span>
-			<span class="text-[11px] text-muted mt-0.5">4,910 completions</span>
+		<div class="flex flex-col card-inset p-3.5">
+			<span class="text-[11px] font-semibold uppercase tracking-wider text-label">Top Performing</span>
+			<span class="truncate text-base font-bold text-heading mt-1">{topGoal ? topGoal.name : '—'}</span>
+			<span class="text-[10px] font-mono text-slate-500 mt-0.5">
+				{topGoal ? `${topGoal.conversions.toLocaleString()} conversions (${topGoal.conversionRate}%)` : 'No events yet'}
+			</span>
 		</div>
 	</div>
 
-	<!-- Goals List -->
-	<div class="flex flex-col gap-3">
-		{#each goals as goal}
-			<div class="glass-card flex items-center justify-between p-5">
-				<div class="flex items-center gap-4">
-					<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-lg">
-						🎯
-					</div>
-					<div>
-						<div class="flex items-center gap-2">
-							<h3 class="text-sm font-semibold text-white">{goal.name}</h3>
-							<span
-								class="rounded px-2 py-0.5 text-[10px] font-mono uppercase {goal.type === 'event'
-									? 'bg-primary/20 text-primary-light'
-									: 'bg-cyan-500/20 text-cyan-400'}"
-							>
-								{goal.type}
-							</span>
-						</div>
-						<p class="text-xs font-mono text-muted-light mt-0.5">Trigger: {goal.trigger}</p>
-					</div>
-				</div>
-
-				<div class="flex items-center gap-6">
-					<div class="text-right">
-						<span class="text-sm font-semibold text-white">{goal.conversions.toLocaleString()}</span>
-						<p class="text-[11px] text-muted-light">Conversions</p>
-					</div>
-
-					<div class="text-right w-20">
-						<span class="text-sm font-bold text-accent">{goal.conversionRate}%</span>
-						<p
-							class="text-[11px]"
-							class:text-emerald-400={goal.trend > 0}
-							class:text-red-400={goal.trend < 0}
-							class:text-muted={goal.trend === 0}
-						>
-							{goal.trend > 0 ? '↑' : goal.trend < 0 ? '↓' : ''} {Math.abs(goal.trend)}%
-						</p>
-					</div>
-
-					<button
-						onclick={() => handleDeleteGoal(goal.id)}
-						class="rounded-lg p-2 text-muted hover:text-red-400 hover:bg-red-500/10"
-						title="Delete Goal"
-					>
-						🗑️
-					</button>
-				</div>
+	<!-- Goals List or Zero State -->
+	{#if isLoading}
+		<div class="flex items-center justify-center p-12 text-slate-400 text-xs font-mono">
+			<RefreshCw size={16} class="animate-spin mr-2 text-indigo-400" />
+			<span>Loading goals telemetry...</span>
+		</div>
+	{:else if goals.length === 0}
+		<div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-themed-strong bg-input p-8 text-center">
+			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-3">
+				<Target size={24} />
 			</div>
-		{/each}
-	</div>
+			<h3 class="text-sm font-semibold text-heading">No Conversion Goals Configured Yet</h3>
+			<p class="max-w-md text-xs text-slate-400 mt-1 mb-5">
+				Define goals to track when visitors complete critical actions like reading articles, submitting forms, or reaching specific URLs.
+			</p>
+
+			<div class="flex flex-wrap items-center justify-center gap-2 mb-4">
+				<span class="text-[11px] text-label">Quick Templates:</span>
+				<button
+					onclick={() => addStarterGoal('Read Articles', 'pageview', '/metropolitan/*')}
+					class="rounded border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 text-xs font-mono text-indigo-300 hover:bg-indigo-500/20 transition-colors"
+				>
+					+ Article Views (/metropolitan/*)
+				</button>
+				<button
+					onclick={() => addStarterGoal('Homepage Visit', 'pageview', '/')}
+					class="rounded border border-themed bg-input px-2.5 py-1 text-xs font-mono text-slate-300 hover:bg-card-hover transition-colors"
+				>
+					+ Homepage Visit (/)
+				</button>
+				<button
+					onclick={() => addStarterGoal('User Signup', 'event', 'signup')}
+					class="rounded border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-xs font-mono text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+				>
+					+ Event: signup
+				</button>
+			</div>
+
+			<button
+				onclick={() => (showAddModal = true)}
+				class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+			>
+				<Plus size={14} />
+				<span>Define Custom Goal</span>
+			</button>
+		</div>
+	{:else}
+		<div class="flex flex-col gap-2">
+			{#each goals as goal}
+				<div class="flex items-center justify-between card p-3.5 px-4 transition-colors hover:border-indigo-500/30">
+					<div class="flex items-center gap-3">
+						<div class="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+							<Target size={16} strokeWidth={2} />
+						</div>
+						<div>
+							<div class="flex items-center gap-2">
+								<h3 class="text-xs font-semibold text-heading">{goal.name}</h3>
+								<span
+									class="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase font-semibold {goal.type === 'event'
+										? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
+										: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'}"
+								>
+									{goal.type}
+								</span>
+							</div>
+							<p class="font-mono text-[11px] text-slate-400 mt-0.5">
+								Trigger: <span class="text-body">{goal.trigger}</span>
+							</p>
+						</div>
+					</div>
+
+					<div class="flex items-center gap-6">
+						<div class="text-right">
+							<span class="font-mono text-sm font-bold text-heading">{goal.conversions.toLocaleString()}</span>
+							<p class="text-[10px] text-hint">Conversions</p>
+						</div>
+
+						<div class="text-right w-16">
+							<span class="font-mono text-sm font-bold text-emerald-400">{goal.conversionRate}%</span>
+							<p class="text-[10px] text-hint">Rate</p>
+						</div>
+
+						<button
+							onclick={() => handleDeleteGoal(goal.id)}
+							class="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-500/10 hover:text-rose-400 transition-colors"
+							title="Delete Goal"
+							aria-label="Delete Goal"
+						>
+							<Trash2 size={13} strokeWidth={1.75} />
+						</button>
+					</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Add Goal Modal -->
 	{#if showAddModal}
 		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-			<div class="glass-card w-full max-w-md p-6 shadow-2xl flex flex-col gap-4">
-				<div class="flex items-center justify-between">
-					<h2 class="text-base font-semibold text-white">Define Goal</h2>
-					<button onclick={() => (showAddModal = false)} class="text-muted hover:text-white">✕</button>
+			<div class="w-full max-w-md card-modal p-5 flex flex-col gap-4">
+				<div class="flex items-center justify-between border-b border-themed pb-3">
+					<div class="flex items-center gap-2">
+						<Target size={16} class="text-indigo-400" />
+						<h2 class="text-sm font-bold text-heading">Define Target Milestone</h2>
+					</div>
+					<button onclick={() => (showAddModal = false)} class="text-slate-400 hover:text-heading" aria-label="Close">
+						<X size={16} />
+					</button>
 				</div>
 
 				<div class="flex flex-col gap-3">
 					<div>
-						<label for="goal-name" class="mb-1.5 block text-xs font-medium text-muted-light">Goal Name</label>
+						<label for="goal-name" class="mb-1 block text-[11px] font-medium text-body">Goal Name</label>
 						<input
 							id="goal-name"
 							type="text"
 							bind:value={newGoalName}
-							placeholder="e.g. Free Trial Signup"
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							placeholder="e.g. Read News Articles"
+							class="w-full rounded-md input-field px-3 py-1.5 text-xs"
 						/>
 					</div>
 
 					<div>
-						<label for="goal-type" class="mb-1.5 block text-xs font-medium text-muted-light">Goal Trigger Type</label>
+						<label for="goal-type" class="mb-1 block text-[11px] font-medium text-body">Trigger Type</label>
 						<select
 							id="goal-type"
 							bind:value={newGoalType}
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							class="w-full rounded-md input-solid px-3 py-1.5 text-xs focus:border-indigo-500"
 						>
+							<option value="pageview">Page View (URL Path Match)</option>
 							<option value="event">Custom Event (via gravlytics.track)</option>
-							<option value="pageview">Page Visit (URL Path match)</option>
 						</select>
 					</div>
 
 					<div>
-						<label for="goal-trigger" class="mb-1.5 block text-xs font-medium text-muted-light">
-							{newGoalType === 'event' ? 'Event Name (e.g. signup)' : 'URL Path (e.g. /thank-you)'}
+						<label for="goal-trigger" class="mb-1 block text-[11px] font-medium text-body">
+							{newGoalType === 'event' ? 'Event Name' : 'URL Path Pattern'}
 						</label>
 						<input
 							id="goal-trigger"
 							type="text"
 							bind:value={newGoalTrigger}
-							placeholder={newGoalType === 'event' ? 'signup' : '/thank-you'}
-							class="w-full rounded-lg border border-ink-border bg-ink-lighter px-3.5 py-2 text-sm text-white focus:border-primary focus:outline-none"
+							placeholder={newGoalType === 'event' ? 'signup' : '/metropolitan/*'}
+							class="w-full rounded-md input-field px-3 py-1.5 text-xs"
 						/>
 					</div>
+
+					<!-- Real trigger suggestions detected from traffic history -->
+					{#if newGoalType === 'pageview' && detectedPaths.length > 0}
+						<div class="flex flex-col gap-1.5 pt-1">
+							<span class="text-[10px] font-mono text-label">Detected Paths in Traffic:</span>
+							<div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+								{#each detectedPaths as path}
+									<button
+										type="button"
+										onclick={() => {
+											newGoalTrigger = path.length > 25 ? path.split('/')[1] ? `/${path.split('/')[1]}/*` : path : path;
+											if (!newGoalName) newGoalName = `View ${newGoalTrigger}`;
+										}}
+										class="rounded border border-themed bg-input px-2 py-0.5 text-[10px] font-mono text-body hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-heading transition-colors"
+									>
+										{path.length > 30 ? path.substring(0, 30) + '...' : path}
+									</button>
+								{/each}
+							</div>
+						</div>
+					{:else if newGoalType === 'event' && detectedEvents.length > 0}
+						<div class="flex flex-col gap-1.5 pt-1">
+							<span class="text-[10px] font-mono text-label">Detected Events in Traffic:</span>
+							<div class="flex flex-wrap gap-1.5">
+								{#each detectedEvents as ev}
+									<button
+										type="button"
+										onclick={() => {
+											newGoalTrigger = ev;
+											if (!newGoalName) newGoalName = `Event: ${ev}`;
+										}}
+										class="rounded border border-themed bg-input px-2 py-0.5 text-[10px] font-mono text-cyan-300 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-colors"
+									>
+										{ev}
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
 				</div>
 
-				<div class="mt-2 flex justify-end gap-2">
+				<div class="mt-2 flex justify-end gap-2 border-t border-themed pt-3">
 					<button
+						type="button"
 						onclick={() => (showAddModal = false)}
-						class="rounded-lg px-4 py-2 text-xs font-medium text-muted-light hover:bg-ink-lighter"
+						class="rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-heading"
 					>
 						Cancel
 					</button>
 					<button
+						type="button"
+						disabled={!newGoalName || !newGoalTrigger || isSaving}
 						onclick={handleAddGoal}
-						class="gradient-accent rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-primary/25 hover:opacity-90"
+						class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors disabled:opacity-50"
 					>
-						Save Goal
+						{#if isSaving}
+							<RefreshCw size={12} class="animate-spin" />
+						{/if}
+						<span>Save Goal</span>
 					</button>
 				</div>
 			</div>
