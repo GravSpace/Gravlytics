@@ -29,10 +29,20 @@ export interface BreakdownItem {
 
 const API_BASE = import.meta.env.VITE_QUERY_API_URL || 'http://localhost:8082';
 
-export async function fetchOverview(siteId: string, from?: string, to?: string): Promise<OverviewStats> {
+export async function fetchOverview(
+	siteId: string,
+	from?: string,
+	to?: string,
+	filterPath?: string,
+	filterCountry?: string,
+	filterDevice?: string
+): Promise<OverviewStats> {
 	const params = new URLSearchParams({ site_id: siteId });
 	if (from) params.set('from', from);
 	if (to) params.set('to', to);
+	if (filterPath) params.set('path', filterPath);
+	if (filterCountry) params.set('country', filterCountry);
+	if (filterDevice) params.set('device', filterDevice);
 
 	try {
 		const res = await fetch(`${API_BASE}/api/stats/overview?${params.toString()}`);
@@ -923,5 +933,275 @@ export async function fetchCampaignOverview(
 		top_source: 'Direct',
 		campaigns: []
 	};
+}
+
+// ── GA4 DebugView Types & Client ──
+
+export interface DebugEventItem {
+	event_id: string;
+	event_name: string;
+	timestamp: string;
+	visitor_id: string;
+	session_id: string;
+	hostname: string;
+	url_path: string;
+	referrer_domain: string;
+	referrer_path: string;
+	utm_source: string;
+	utm_medium: string;
+	utm_campaign: string;
+	country: string;
+	region: string;
+	city: string;
+	device_type: string;
+	browser: string;
+	browser_version: string;
+	os: string;
+	os_version: string;
+	screen_width: number;
+	is_debug: boolean;
+	props: Record<string, string>;
+}
+
+export interface DebugTimelineBucket {
+	minute: string;
+	count: number;
+}
+
+export interface DebugStreamResponse {
+	events: DebugEventItem[];
+	active_sessions: number;
+	active_visitors: number;
+	total_past_30m: number;
+	timeline_buckets: DebugTimelineBucket[];
+}
+
+export async function fetchDebugStream(
+	siteId: string,
+	limit: number = 50,
+	onlyDebug: boolean = false
+): Promise<DebugStreamResponse> {
+	const params = new URLSearchParams({ site_id: siteId, limit: String(limit) });
+	if (onlyDebug) params.set('only_debug', 'true');
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/debugview?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch debug stream', err);
+	}
+
+	return {
+		events: [],
+		active_sessions: 0,
+		active_visitors: 0,
+		total_past_30m: 0,
+		timeline_buckets: []
+	};
+}
+
+// ── Custom Dimensions & Properties Types & Client ──
+
+export interface PropertyKeyItem {
+	key: string;
+	total_count: number;
+	unique_values: number;
+	sample_values: string[];
+}
+
+export interface PropertyValueItem {
+	value: string;
+	count: number;
+	percentage: number;
+	visitors: number;
+}
+
+export interface PropertyValueBreakdown {
+	key: string;
+	total_count: number;
+	values: PropertyValueItem[];
+}
+
+export async function fetchPropertyKeys(
+	siteId: string,
+	from?: string,
+	to?: string
+): Promise<PropertyKeyItem[]> {
+	const params = new URLSearchParams({ site_id: siteId });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/properties/keys?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch property keys', err);
+	}
+	return [];
+}
+
+export async function fetchPropertyValues(
+	siteId: string,
+	key: string,
+	from?: string,
+	to?: string,
+	limit: number = 30
+): Promise<PropertyValueBreakdown> {
+	const params = new URLSearchParams({ site_id: siteId, key, limit: String(limit) });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/properties/values?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch property values', err);
+	}
+
+	return { key, total_count: 0, values: [] };
+}
+
+// ── Multi-Touch Attribution Types & Client ──
+
+export interface AttributionChannel {
+	channel: string;
+	first_touch_count: number;
+	first_touch_share: number;
+	last_touch_count: number;
+	last_touch_share: number;
+	linear_count: number;
+	linear_share: number;
+}
+
+export interface AttributionResponse {
+	goal_event: string;
+	total_goals: number;
+	channels: AttributionChannel[];
+}
+
+export async function fetchAttribution(
+	siteId: string,
+	from?: string,
+	to?: string,
+	goal: string = 'pageview'
+): Promise<AttributionResponse> {
+	const params = new URLSearchParams({ site_id: siteId, goal });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/attribution?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch attribution models', err);
+	}
+
+	return {
+		goal_event: goal,
+		total_goals: 0,
+		channels: []
+	};
+}
+
+// ── Segment Comparison Types & Client ──
+
+export interface SegmentItem {
+	value: string;
+	pageviews: number;
+	unique_visitors: number;
+}
+
+export interface SegmentMetrics {
+	name: string;
+	visitors: number;
+	pageviews: number;
+	sessions: number;
+	bounce_rate: number;
+	avg_duration_sec: number;
+	top_pages: SegmentItem[];
+	top_referrers: SegmentItem[];
+}
+
+export interface SegmentComparisonResponse {
+	segment_a: SegmentMetrics;
+	segment_b: SegmentMetrics;
+}
+
+export async function fetchSegmentComparison(
+	siteId: string,
+	from?: string,
+	to?: string,
+	segmentA: string = 'device:mobile',
+	segmentB: string = 'device:desktop'
+): Promise<SegmentComparisonResponse> {
+	const params = new URLSearchParams({
+		site_id: siteId,
+		segment_a: segmentA,
+		segment_b: segmentB
+	});
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/segments/compare?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch segment comparison', err);
+	}
+
+	const emptySeg = (name: string): SegmentMetrics => ({
+		name,
+		visitors: 0,
+		pageviews: 0,
+		sessions: 0,
+		bounce_rate: 0,
+		avg_duration_sec: 0,
+		top_pages: [],
+		top_referrers: []
+	});
+
+	return {
+		segment_a: emptySeg(segmentA),
+		segment_b: emptySeg(segmentB)
+	};
+}
+
+// ── Test Event Dispatcher for DebugView ──
+
+const COLLECTOR_URL = import.meta.env.VITE_COLLECTOR_URL || 'http://localhost:8081';
+
+export async function sendTestEvent(
+	siteId: string,
+	eventName: string,
+	props: Record<string, any> = {}
+): Promise<boolean> {
+	try {
+		const payload = {
+			s: siteId,
+			n: eventName,
+			u: '/test/debug-simulator',
+			h: typeof location !== 'undefined' ? location.hostname : 'localhost',
+			r: 'https://gravlytics.local/debug-simulator',
+			w: typeof window !== 'undefined' ? window.innerWidth : 1280,
+			t: 'debug_tab_' + Math.random().toString(36).substring(2, 8),
+			tz: 'UTC',
+			l: 'en-US',
+			p: {
+				debug: '1',
+				test_flag: 'simulated_event',
+				...props
+			}
+		};
+
+		const res = await fetch(`${COLLECTOR_URL}/api/collect`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'text/plain' },
+			body: JSON.stringify(payload)
+		});
+		return res.ok;
+	} catch (err) {
+		console.error('Failed to send test event', err);
+		return false;
+	}
 }
 

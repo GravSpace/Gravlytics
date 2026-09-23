@@ -130,7 +130,7 @@
 				<a
 					href="/settings/sites"
 					onclick={() => (isOpen = false)}
-					class="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1"
+					class="text-primary hover:text-primary-hover font-medium flex items-center gap-1"
 				>
 					<Plus size={11} />
 					<span>Manage / Add Sites</span>

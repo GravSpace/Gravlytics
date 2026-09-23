@@ -187,7 +187,7 @@
 					<div class="flex flex-col gap-1">
 						<div class="flex items-center justify-between text-xs">
 							<div class="flex items-center gap-2">
-								<span class="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500/20 text-[10px] font-mono font-bold text-indigo-300 border border-indigo-500/30">
+								<span class="flex h-4 w-4 items-center justify-center rounded-full bg-primary/10 text-[10px] font-mono font-bold text-primary border border-primary/20">
 									{step.step}
 								</span>
 								<span class="font-semibold text-body">{step.name}</span>
@@ -270,14 +270,14 @@
 				</div>
 
 				<p class="text-xs text-label">
-					Configure sequential conversion stages. Use URL path (e.g. <code class="text-indigo-300">/</code> or <code class="text-indigo-300">/metropolitan/*</code>) or custom events (e.g. <code class="text-cyan-300">event: signup</code>).
+					Configure sequential conversion stages. Use URL path (e.g. <code class="text-primary font-semibold">/</code> or <code class="text-primary font-semibold">/metropolitan/*</code>) or custom events (e.g. <code class="text-emerald-600 dark:text-emerald-400 font-semibold">event: signup</code>).
 				</p>
 
 				<!-- Steps List -->
 				<div class="flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
 					{#each editSteps as step, idx}
 						<div class="flex items-center gap-2 rounded-lg border border-themed bg-card-solid p-2.5">
-							<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-[10px] font-mono font-bold text-indigo-300">
+							<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-mono font-bold text-primary">
 								{idx + 1}
 							</span>
 							<input
@@ -309,7 +309,7 @@
 					<button
 						type="button"
 						onclick={addStepToEdit}
-						class="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300"
+						class="flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-hover"
 					>
 						<Plus size={13} />
 						<span>Add Stage</span>
@@ -324,7 +324,7 @@
 								<button
 									type="button"
 									onclick={() => editSteps.push({ name: dp === '/' ? 'Homepage' : dp, path: dp })}
-									class="px-2 py-0.5 rounded bg-card border border-themed text-[11px] font-mono text-indigo-300 hover:bg-indigo-600/20 hover:border-indigo-500/40 transition-colors"
+									class="px-2 py-0.5 rounded bg-card border border-themed text-[11px] font-mono text-primary font-medium hover:bg-primary/10 hover:border-primary/30 transition-colors"
 								>
 									+ {dp}
 								</button>

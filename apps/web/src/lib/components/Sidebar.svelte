@@ -25,7 +25,8 @@
 		Network,
 		Flame,
 		Bug,
-		ShoppingBag
+		ShoppingBag,
+		GitCompare
 	} from '@lucide/svelte';
 
 	let { collapsed = $bindable(false) }: { collapsed: boolean } = $props();
@@ -33,6 +34,7 @@
 	const navItems = [
 		{ label: 'Overview', href: '/', icon: LayoutDashboard },
 		{ label: 'Realtime', href: '/realtime', icon: Activity, badge: 'Live' },
+		{ label: 'DebugView', href: '/debugview', icon: Bug, badge: 'Live' },
 		{ label: 'Network Rollup', href: '/network', icon: Network },
 		{ label: 'Sessions', href: '/sessions', icon: Timer },
 		{ label: 'Pages & Paths', href: '/pages', icon: FileText },
@@ -40,6 +42,7 @@
 		{ label: 'User Journeys', href: '/journeys', icon: Route },
 		{ label: 'Heatmaps & Scroll', href: '/heatmaps', icon: Flame },
 		{ label: 'Campaigns & UTM', href: '/campaigns', icon: Megaphone },
+		{ label: 'Attribution & Segments', href: '/attribution', icon: GitCompare },
 		{ label: 'E-commerce & Revenue', href: '/ecommerce', icon: ShoppingBag },
 		{ label: 'Web Vitals', href: '/vitals', icon: Gauge },
 		{ label: 'Error Tracking', href: '/errors', icon: Bug },

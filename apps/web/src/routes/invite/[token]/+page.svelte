@@ -27,7 +27,7 @@
 			<h1 class="text-xl font-bold text-heading">You're Invited to Join</h1>
 			<p class="text-base font-semibold text-indigo-400 font-mono">{data.invite.orgName}</p>
 			<p class="text-xs text-label leading-relaxed">
-				<strong>{data.invite.inviterName}</strong> has invited you to collaborate as <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">{data.invite.role}</span>.
+				<strong>{data.invite.inviterName}</strong> has invited you to collaborate as <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold border border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400">{data.invite.role}</span>.
 			</p>
 		</div>
 

@@ -13,35 +13,62 @@
 ;(function () {
   'use strict'
 
+  var w = window
+  var d = document
+  var nav = navigator
+  var loc = location
+
   // Respect Do Not Track / Global Privacy Control
-  if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl) return
+  if (nav.doNotTrack === '1' || nav.globalPrivacyControl) return
 
   // Anti-Bot: Drop automated browsers, headless environments & scrapers before any network calls
   if (
-    navigator.webdriver ||
-    window._phantom ||
-    window.__nightmare ||
-    window.callPhantom ||
-    (navigator.userAgent && /bot|crawler|spider|crawling|headless|scrape|slurp/i.test(navigator.userAgent))
+    nav.webdriver ||
+    w._phantom ||
+    w.__nightmare ||
+    w.callPhantom ||
+    (nav.userAgent && /bot|crawler|spider|crawling|headless|scrape|slurp/i.test(nav.userAgent))
   ) {
     return
   }
 
-  var script = document.currentScript
-  var siteId = script && script.getAttribute('data-site-id')
+  var script = d.currentScript
+  var getAttr = function (el, a) { return el && el.getAttribute ? el.getAttribute(a) : null }
+  var siteId = getAttr(script, 'data-site-id')
   if (!siteId) return
 
   // Optional domain filter (e.g. data-domains="example.com,app.example.com")
-  var domains = script.getAttribute('data-domains')
+  var domains = getAttr(script, 'data-domains')
   if (domains) {
-    var domainList = domains.split(',').map(function (d) { return d.trim() })
-    if (domainList.indexOf(location.hostname) === -1) return
+    var domainList = domains.split(',').map(function (dm) { return dm.trim() })
+    if (domainList.indexOf(loc.hostname) === -1) return
   }
 
-  var autoTrack = script.getAttribute('data-auto-track') !== 'false'
+  var isNotFalse = function (k) { return !script || getAttr(script, k) !== 'false' }
+  var autoTrack = isNotFalse('data-auto-track')
+  var enhancedMeasurement = isNotFalse('data-enhanced')
+  var trackOutbound = isNotFalse('data-track-outbound')
+  var trackDownloads = isNotFalse('data-track-downloads')
+  var trackSearch = isNotFalse('data-track-search')
+  var trackForms = isNotFalse('data-track-forms')
+
+  // Debug mode: URL ?gravlytics_debug=true / _debug=1 / data-debug="true", sessionStorage, script data-debug="true"
+  var isDebugMode = false
+  var DEBUG_KEY = 'gravlytics_debug'
+  try {
+    var sp = new URLSearchParams(loc.search)
+    var isD = function (v) { return v === 'true' || v === '1' || v === '"true"' }
+    var urlDebug = isD(sp.get(DEBUG_KEY)) || isD(sp.get('_debug')) || isD(sp.get('data-debug')) || isD(sp.get('debug'))
+    if (urlDebug || (script && isD(getAttr(script, 'data-debug')))) {
+      isDebugMode = true
+      sessionStorage.setItem(DEBUG_KEY, 'true')
+    } else if (sessionStorage.getItem(DEBUG_KEY) === 'true') {
+      isDebugMode = true
+    }
+  } catch (e) {}
 
   var endpoint =
-    (script.getAttribute('data-api') || script.src.replace(/\/[^/]*$/, '')) +
+    (getAttr(script, 'data-api') || (script && script.src ? script.src.replace(/\/[^/]*$/, '') : '')) +
     '/api/collect'
 
   // Unique tab ID for session tracking (no cookies, memory only)
@@ -49,7 +76,7 @@
     Math.random().toString(36).substring(2) + Date.now().toString(36)
 
   // Screen width
-  var sw = window.screen ? window.screen.width : 0
+  var sw = w.screen ? w.screen.width : 0
 
   // Anti-DDoS client-side leaky bucket (max 12 events per 5s window, max 60 per minute per tab)
   var recentEvents = []
@@ -64,28 +91,32 @@
     return false
   }
 
+  // Event listener helper
+  function on(target, ev, fn, opt) {
+    if (target && target.addEventListener) target.addEventListener(ev, fn, opt)
+  }
+
   // Helper to build base payload
   function getBasePayload(name) {
     var tz = ''
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch (e) {}
-    var lang = navigator.language || ''
 
     var payload = {
       s: siteId,            // site_id
       n: name || 'pageview',// event_name
-      u: location.pathname, // url_path
-      h: location.hostname, // hostname
-      r: document.referrer, // referrer
+      u: loc.pathname,      // url_path
+      h: loc.hostname,      // hostname
+      r: d.referrer,        // referrer
       w: sw,                // screen_width
       t: tabId,             // tab session identifier
       tz: tz,               // timezone e.g. Asia/Jakarta
-      l: lang,              // locale e.g. id-ID
+      l: nav.language || '',// locale e.g. id-ID
     }
 
     // UTM params on pageviews
     if (payload.n === 'pageview') {
       try {
-        var params = new URLSearchParams(location.search)
+        var params = new URLSearchParams(loc.search)
         var us = params.get('utm_source')
         var um = params.get('utm_medium')
         var uc = params.get('utm_campaign')
@@ -136,8 +167,16 @@
 
     // Merge page-level dataLayer metadata with event-specific props
     var mergedProps = Object.assign({}, pageProps, props || {})
+    if (isDebugMode) {
+      mergedProps.debug = '1'
+    }
     if (Object.keys(mergedProps).length > 0) {
       payload.p = mergedProps
+    }
+
+    // Console logging in Debug Mode
+    if (isDebugMode && typeof console !== 'undefined' && console.log) {
+      console.log('%c[Gravlytics Debug] ' + (payload.n || 'event'), 'color:#6366f1;font-weight:bold;', payload)
     }
 
     var data = JSON.stringify(payload)
@@ -158,50 +197,70 @@
   // ── Scroll Depth Tracking (25%, 50%, 75%, 100%) ──
   var trackedMilestones = {}
   function checkScrollDepth() {
-    var winHeight = window.innerHeight || document.documentElement.clientHeight || 0
-    var docHeight = Math.max(
-      document.body ? document.body.scrollHeight : 0,
-      document.documentElement ? document.documentElement.scrollHeight : 0,
-      winHeight
-    )
-    if (docHeight <= winHeight + 50) return // page fits in one screen
+    var winHeight = w.innerHeight || d.documentElement.clientHeight || 0
+    if (winHeight <= 0) return
 
-    var scrollTop = window.pageYOffset || (document.documentElement ? document.documentElement.scrollTop : 0) || (document.body ? document.body.scrollTop : 0) || 0
-    var scrollPct = Math.round(((scrollTop + winHeight) / docHeight) * 100)
-
+    var doc = d.documentElement || {}
+    var bod = d.body || {}
+    var docHeight = Math.max(bod.scrollHeight || 0, doc.scrollHeight || 0, bod.offsetHeight || 0, doc.offsetHeight || 0, winHeight)
     var milestones = [25, 50, 75, 100]
-    for (var i = 0; i < milestones.length; i++) {
+
+    // Single-screen page: content completely visible without needing deep scroll
+    if (docHeight <= winHeight + 60) {
+      for (var f = 0; f < 4; f++) {
+        var fm = milestones[f]
+        if (!trackedMilestones[fm]) {
+          trackedMilestones[fm] = true
+          send('$scroll', { depth: String(fm), path: loc.pathname })
+        }
+      }
+      return
+    }
+
+    var scrollTop = w.pageYOffset || doc.scrollTop || bod.scrollTop || 0
+    var scrollPct = Math.round(((scrollTop + winHeight) / docHeight) * 100)
+    if ((scrollTop + winHeight) >= (docHeight - 60) || scrollPct >= 95) {
+      scrollPct = 100
+    }
+
+    for (var i = 0; i < 4; i++) {
       var m = milestones[i]
       if (scrollPct >= m && !trackedMilestones[m]) {
         trackedMilestones[m] = true
-        send('$scroll', { depth: String(m), path: location.pathname })
+        send('$scroll', { depth: String(m), path: loc.pathname })
       }
     }
   }
 
   var scrollTimer = null
-  window.addEventListener('scroll', function () {
+  on(w, 'scroll', function () {
     if (scrollTimer) return
     scrollTimer = setTimeout(function () {
       scrollTimer = null
       checkScrollDepth()
-    }, 250)
+    }, 200)
   }, { passive: true })
+
+  // Trigger on initial view and exit
+  setTimeout(checkScrollDepth, 1500)
+  on(d, 'visibilitychange', function () {
+    if (d.visibilityState === 'hidden') checkScrollDepth()
+  })
 
   // ── Click Heatmap Tracking ──
   var sessionClickCount = 0
-  document.addEventListener('click', function (e) {
+  on(d, 'click', function (e) {
     if (sessionClickCount >= 30) return // limit per page view
     var target = e.target
     if (!target) return
-    var winW = window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 1000)
-    var winH = window.innerHeight || (document.documentElement ? document.documentElement.clientHeight : 1000)
+    var winW = w.innerWidth || (d.documentElement ? d.documentElement.clientWidth : 1000)
+    var winH = w.innerHeight || (d.documentElement ? d.documentElement.clientHeight : 1000)
     var x = Math.min(100, Math.max(0, Math.round((e.clientX / winW) * 100)))
     var y = Math.min(100, Math.max(0, Math.round((e.clientY / winH) * 100)))
     var tag = target.tagName ? target.tagName.toLowerCase() : 'element'
     var text = (target.innerText || target.value || target.alt || target.title || '').substring(0, 30).trim()
     sessionClickCount++
-    send('$click', { x: String(x), y: String(y), tag: tag, text: text, path: location.pathname })
+    send('$click', { x: String(x), y: String(y), tag: tag, text: text, path: loc.pathname })
   }, { passive: true })
 
   // ── JavaScript Error Tracking ──
@@ -210,7 +269,7 @@
     if (errorEventsCount >= 10) return // avoid infinite error loops
     errorEventsCount++
     var cleanMsg = String(msg || 'Unknown Script Error').substring(0, 200)
-    var cleanFile = String(file || location.pathname).substring(0, 150)
+    var cleanFile = String(file || loc.pathname).substring(0, 150)
     var cleanStack = String(stack || '').substring(0, 300)
     send('$error', {
       message: cleanMsg,
@@ -218,26 +277,41 @@
       lineno: String(line || 0),
       colno: String(col || 0),
       stack: cleanStack,
-      path: location.pathname
+      path: loc.pathname
     })
   }
 
-  window.addEventListener('error', function (e) {
-    if (!e) return
-    trackError(e.message, e.filename, e.lineno, e.colno, e.error && e.error.stack)
+  on(w, 'error', function (e) {
+    if (e) trackError(e.message, e.filename, e.lineno, e.colno, e.error && e.error.stack)
   })
 
-  window.addEventListener('unhandledrejection', function (e) {
-    if (!e) return
-    var reason = e.reason || {}
-    trackError(reason.message || String(reason), location.pathname, 0, 0, reason.stack)
+  on(w, 'unhandledrejection', function (e) {
+    var r = (e && e.reason) || {}
+    trackError(r.message || String(r), loc.pathname, 0, 0, r.stack)
   })
+
+  // ── Site Search Tracking (Enhanced Measurement) ──
+  function checkSiteSearch() {
+    if (!enhancedMeasurement || !trackSearch) return
+    try {
+      var sp = new URLSearchParams(loc.search)
+      var keys = ['q', 's', 'search', 'query', 'keyword']
+      for (var i = 0; i < 5; i++) {
+        var val = sp.get(keys[i])
+        if (val && (val = val.trim())) {
+          send('search', { search_term: val.substring(0, 100), search_param: keys[i], path: loc.pathname })
+          break
+        }
+      }
+    } catch (e) {}
+  }
 
   // Track pageview
   function page() {
     trackedMilestones = {}
     sessionClickCount = 0
     send('pageview')
+    checkSiteSearch()
   }
 
   // ── SPA support: intercept History API ──
@@ -248,53 +322,119 @@
       if (autoTrack) page()
     }
   }
-  window.addEventListener('popstate', function () {
+  on(w, 'popstate', function () {
     if (autoTrack) page()
   })
 
+  // ── Enhanced Measurement: Outbound Link Clicks & File Downloads ──
+  on(d, 'click', function (e) {
+    if (!enhancedMeasurement) return
+    var el = e.target
+    while (el && el.tagName !== 'A' && el !== d.body) {
+      el = el.parentElement
+    }
+    if (!el || el.tagName !== 'A' || !el.href) return
+
+    var href = el.href
+    var linkHost = el.hostname
+    var linkText = (el.innerText || getAttr(el, 'aria-label') || el.title || '').trim().substring(0, 60)
+
+    // 1. File Download
+    if (trackDownloads && /\.(pdf|xlsx?|docx?|pptx?|txt|csv|zip|rar|mp[34]|mov)($|[?#])/i.test(href)) {
+      var parts = href.split(/[?#]/)[0].split('/')
+      var fName = parts.pop() || ''
+      var ext = fName.split('.').pop().toLowerCase()
+      send('file_download', { file_name: fName, file_extension: ext, url: href, text: linkText, path: loc.pathname })
+      return
+    }
+
+    // 2. Outbound Link
+    if (
+      trackOutbound &&
+      linkHost &&
+      linkHost !== loc.hostname &&
+      !/^javascript:|^mailto:|^tel:/i.test(href)
+    ) {
+      send('outbound_click', {
+        url: href,
+        domain: linkHost,
+        text: linkText,
+        target: el.target || '_self',
+        path: loc.pathname
+      })
+    }
+  }, { passive: true })
+
+  // ── Enhanced Measurement: Form Submissions ──
+  if (enhancedMeasurement && trackForms) {
+    on(d, 'submit', function (e) {
+      try {
+        var form = e.target
+        if (!form || form.tagName !== 'FORM') return
+        var formId = form.id || getAttr(form, 'name') || 'unnamed_form'
+        var formAction = form.action || loc.pathname
+        var actionPath = formAction
+        try { actionPath = new URL(formAction).pathname } catch (err) {}
+        send('form_submit', {
+          form_id: formId,
+          form_name: getAttr(form, 'name') || '',
+          form_destination: actionPath,
+          path: loc.pathname
+        })
+      } catch (err) {}
+    }, { capture: true })
+  }
+
   // ── HTML Data Attribute Event Tracking ──
-  document.addEventListener(
-    'click',
-    function (e) {
-      var target = e.target
-      if (!target || !target.closest) return
+  on(d, 'click', function (e) {
+    var target = e.target
+    if (!target || !target.closest) return
 
-      var el = target.closest(
-        '[data-gravlytics-event],[data-umami-event],[data-event]'
-      )
-      if (!el) return
+    var el = target.closest(
+      '[data-gravlytics-event],[data-umami-event],[data-event]'
+    )
+    if (!el) return
 
-      var eventName =
-        el.getAttribute('data-gravlytics-event') ||
-        el.getAttribute('data-umami-event') ||
-        el.getAttribute('data-event')
+    var eventName =
+      getAttr(el, 'data-gravlytics-event') ||
+      getAttr(el, 'data-umami-event') ||
+      getAttr(el, 'data-event')
 
-      if (!eventName) return
+    if (!eventName) return
 
-      var props = {}
-      var attrs = el.attributes
-      for (var i = 0; i < attrs.length; i++) {
-        var attr = attrs[i]
-        var attrName = attr.name
-        var propKey = null
+    var props = {}
+    var attrs = el.attributes
+    for (var i = 0; i < attrs.length; i++) {
+      var attr = attrs[i]
+      var attrName = attr.name
+      var propKey = null
 
-        if (attrName.indexOf('data-gravlytics-event-') === 0) {
-          propKey = attrName.substring(22)
-        } else if (attrName.indexOf('data-umami-event-') === 0) {
-          propKey = attrName.substring(17)
-        } else if (attrName.indexOf('data-prop-') === 0) {
-          propKey = attrName.substring(10)
-        }
-
-        if (propKey) {
-          props[propKey] = attr.value
-        }
+      if (attrName.indexOf('data-gravlytics-event-') === 0) {
+        propKey = attrName.substring(22)
+      } else if (attrName.indexOf('data-umami-event-') === 0) {
+        propKey = attrName.substring(17)
+      } else if (attrName.indexOf('data-prop-') === 0) {
+        propKey = attrName.substring(10)
       }
 
-      send(eventName, props)
-    },
-    true
-  )
+      if (propKey) {
+        props[propKey] = attr.value
+      }
+    }
+
+    send(eventName, props)
+  }, true)
+
+  // Helper for extracting GA4 ecommerce object
+  function attachEcom(source, target) {
+    var ec = source && source.ecommerce
+    if (ec && typeof ec === 'object') {
+      if (ec.value || ec.revenue) target.revenue = String(ec.value || ec.revenue)
+      if (ec.transaction_id) target.order_id = String(ec.transaction_id)
+      if (ec.currency) target.currency = String(ec.currency)
+      if (Array.isArray(ec.items)) target.items_count = String(ec.items.length)
+    }
+  }
 
   // ── Google Analytics dataLayer & gtag Interception ──
   function handleDataLayerItem(item) {
@@ -303,31 +443,20 @@
     if (typeof item === 'object' && item !== null && item.event && typeof item.event === 'string') {
       if (!/^gtm\./.test(item.event)) {
         var props = extractProps(item)
-        if (item.ecommerce && typeof item.ecommerce === 'object') {
-          if (item.ecommerce.value || item.ecommerce.revenue) props.revenue = String(item.ecommerce.value || item.ecommerce.revenue)
-          if (item.ecommerce.transaction_id) props.order_id = String(item.ecommerce.transaction_id)
-          if (item.ecommerce.currency) props.currency = String(item.ecommerce.currency)
-          if (Array.isArray(item.ecommerce.items)) props.items_count = String(item.ecommerce.items.length)
-        }
+        attachEcom(item, props)
         send(item.event, props)
       }
     } else if (typeof item === 'object' && item !== null && !Array.isArray(item) && !item.event) {
-      var extracted = extractProps(item)
-      Object.assign(pageProps, extracted)
+      Object.assign(pageProps, extractProps(item))
     } else if (
       (Array.isArray(item) || (typeof item === 'object' && '0' in item)) &&
       item[0] === 'event' &&
       typeof item[1] === 'string'
     ) {
-      var evtName = item[1]
       var evtProps = item[2] || {}
       var propsObj = typeof evtProps === 'object' ? extractProps(evtProps) : {}
-      if (evtProps.ecommerce && typeof evtProps.ecommerce === 'object') {
-        if (evtProps.ecommerce.value || evtProps.ecommerce.revenue) propsObj.revenue = String(evtProps.ecommerce.value || evtProps.ecommerce.revenue)
-        if (evtProps.ecommerce.transaction_id) propsObj.order_id = String(evtProps.ecommerce.transaction_id)
-        if (evtProps.ecommerce.currency) propsObj.currency = String(evtProps.ecommerce.currency)
-      }
-      send(evtName, propsObj)
+      attachEcom(evtProps, propsObj)
+      send(item[1], propsObj)
     } else if (
       (Array.isArray(item) || (typeof item === 'object' && '0' in item)) &&
       (item[0] === 'set' || item[0] === 'config')
@@ -339,24 +468,24 @@
     }
   }
 
-  window.dataLayer = window.dataLayer || []
-  if (Array.isArray(window.dataLayer)) {
-    for (var d = 0; d < window.dataLayer.length; d++) {
-      handleDataLayerItem(window.dataLayer[d])
+  w.dataLayer = w.dataLayer || []
+  if (Array.isArray(w.dataLayer)) {
+    for (var dlIdx = 0; dlIdx < w.dataLayer.length; dlIdx++) {
+      handleDataLayerItem(w.dataLayer[dlIdx])
     }
   }
 
-  var origPush = window.dataLayer.push
-  window.dataLayer.push = function () {
+  var origPush = w.dataLayer.push
+  w.dataLayer.push = function () {
     for (var a = 0; a < arguments.length; a++) {
       handleDataLayerItem(arguments[a])
     }
-    return origPush ? origPush.apply(window.dataLayer, arguments) : arguments.length
+    return origPush ? origPush.apply(w.dataLayer, arguments) : arguments.length
   }
 
-  if (typeof window.gtag !== 'function') {
-    window.gtag = function () {
-      window.dataLayer.push(arguments)
+  if (typeof w.gtag !== 'function') {
+    w.gtag = function () {
+      w.dataLayer.push(arguments)
     }
   }
 
@@ -397,64 +526,51 @@
       )
       if (changed || force) {
         lastReportedVitals = { lcp: vitals.lcp, cls: vitals.cls, inp: vitals.inp, ttfb: vitals.ttfb, fcp: vitals.fcp }
-        send('vitals', {
-          lcp: String(vitals.lcp),
-          lcp_rating: getVitalRating('lcp', vitals.lcp),
-          cls: String(vitals.cls.toFixed(3)),
-          cls_rating: getVitalRating('cls', vitals.cls),
-          inp: String(vitals.inp),
-          inp_rating: getVitalRating('inp', vitals.inp),
-          ttfb: String(vitals.ttfb),
-          ttfb_rating: getVitalRating('ttfb', vitals.ttfb),
-          fcp: String(vitals.fcp),
-          fcp_rating: getVitalRating('fcp', vitals.fcp)
-        })
+        var vp = {}
+        var vm = ['lcp', 'cls', 'inp', 'ttfb', 'fcp']
+        for (var vi = 0; vi < 5; vi++) {
+          var vk = vm[vi]
+          vp[vk] = String(vk === 'cls' ? vitals.cls.toFixed(3) : vitals[vk])
+          vp[vk + '_rating'] = getVitalRating(vk, vitals[vk])
+        }
+        send('vitals', vp)
       }
     }
   }
 
   if (typeof PerformanceObserver !== 'undefined') {
-    try {
-      var lcpObserver = new PerformanceObserver(function (entryList) {
-        var entries = entryList.getEntries()
-        var lastEntry = entries[entries.length - 1]
-        if (lastEntry) vitals.lcp = Math.round(lastEntry.startTime)
-      })
-      lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true })
-
-      var clsObserver = new PerformanceObserver(function (entryList) {
-        var entries = entryList.getEntries()
-        for (var i = 0; i < entries.length; i++) {
-          if (!entries[i].hadRecentInput) {
-            vitals.cls += entries[i].value
-          }
-        }
-      })
-      clsObserver.observe({ type: 'layout-shift', buffered: true })
-
-      var inpObserver = new PerformanceObserver(function (entryList) {
-        var entries = entryList.getEntries()
-        for (var i = 0; i < entries.length; i++) {
-          var dur = Math.round(entries[i].duration || entries[i].processingEnd - entries[i].startTime || 0)
-          if (dur > vitals.inp) vitals.inp = dur
-        }
-      })
-      inpObserver.observe({ type: 'first-input', buffered: true })
-    } catch (e) {}
+    var po = function (type, fn) {
+      try {
+        new PerformanceObserver(function (list) { fn(list.getEntries()) }).observe({ type: type, buffered: true })
+      } catch (e) {}
+    }
+    po('largest-contentful-paint', function (entries) {
+      var last = entries[entries.length - 1]
+      if (last) vitals.lcp = Math.round(last.startTime)
+    })
+    po('layout-shift', function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        if (!entries[i].hadRecentInput) vitals.cls += entries[i].value
+      }
+    })
+    po('first-input', function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var dur = Math.round(entries[i].duration || entries[i].processingEnd - entries[i].startTime || 0)
+        if (dur > vitals.inp) vitals.inp = dur
+      }
+    })
   }
 
   // Auto-send initial vitals after load or 3.5s
   setTimeout(function () { reportVitals(false) }, 3500)
-  if (window.addEventListener) {
-    window.addEventListener('load', function () {
-      setTimeout(function () { reportVitals(false) }, 2000)
-    })
-    window.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'hidden') reportVitals(true)
-    })
-    window.addEventListener('pagehide', function () { reportVitals(true) })
-    window.addEventListener('beforeunload', function () { reportVitals(true) })
-  }
+  on(w, 'load', function () {
+    setTimeout(function () { reportVitals(false) }, 2000)
+  })
+  on(d, 'visibilitychange', function () {
+    if (d.visibilityState === 'hidden') reportVitals(true)
+  })
+  on(w, 'pagehide', function () { reportVitals(true) })
+  on(w, 'beforeunload', function () { reportVitals(true) })
 
   // ── Ad Viewability & Fill Rate (IAB: 50% for 1s+ & GPT Integration) ──
   var requestedAds = {}
@@ -464,23 +580,24 @@
 
   // Google Publisher Tag (GPT / googletag) Auto-Integration
   try {
-    if (typeof window !== 'undefined') {
-      window.googletag = window.googletag || { cmd: [] }
-      window.googletag.cmd.push(function () {
+    if (typeof w !== 'undefined') {
+      w.googletag = w.googletag || { cmd: [] }
+      w.googletag.cmd.push(function () {
         try {
-          var pubads = window.googletag.pubads()
+          var pubads = w.googletag.pubads()
           if (pubads && pubads.addEventListener) {
+            var getSlotId = function (e) { return (e && e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot' }
             pubads.addEventListener('slotRequested', function (e) {
-              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              var id = getSlotId(e)
               requestedAds[id] = true
               send('ad_request', { slot_id: id, unit: (e.slot && e.slot.getAdUnitPath) ? e.slot.getAdUnitPath() : '' })
             })
             pubads.addEventListener('slotResponseReceived', function (e) {
-              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              var id = getSlotId(e)
               send('ad_fill', { slot_id: id })
             })
             pubads.addEventListener('slotRenderEnded', function (e) {
-              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              var id = getSlotId(e)
               if (!e.isEmpty) {
                 filledAds[id] = true
                 var sz = e.size ? (Array.isArray(e.size) ? e.size.join('x') : String(e.size)) : ''
@@ -490,7 +607,7 @@
               }
             })
             pubads.addEventListener('impressionViewable', function (e) {
-              var id = (e.slot && e.slot.getSlotElementId) ? e.slot.getSlotElementId() : 'gpt_slot'
+              var id = getSlotId(e)
               viewedAds[id] = true
               send('ad_viewable', { slot_id: id, viewable: '1' })
             })
@@ -509,8 +626,8 @@
             var entry = entries[i]
             var el = entry.target
             var slotId =
-              el.getAttribute('data-gravlytics-ad') ||
-              el.getAttribute('data-ad-slot') ||
+              getAttr(el, 'data-gravlytics-ad') ||
+              getAttr(el, 'data-ad-slot') ||
               el.id ||
               'ad_slot'
 
@@ -543,8 +660,8 @@
       el._gly_observed = true
 
       var slotId =
-        el.getAttribute('data-gravlytics-ad') ||
-        el.getAttribute('data-ad-slot') ||
+        getAttr(el, 'data-gravlytics-ad') ||
+        getAttr(el, 'data-ad-slot') ||
         el.id ||
         'ad_slot'
 
@@ -565,7 +682,7 @@
       }
 
       // Attach click tracking
-      el.addEventListener('click', function () {
+      on(el, 'click', function () {
         send('ad_click', { slot_id: slotId })
       })
 
@@ -575,7 +692,7 @@
     }
 
     function observeAdSlots() {
-      var adElements = document.querySelectorAll(
+      var adElements = d.querySelectorAll(
         '[data-gravlytics-ad],[data-ad-slot],.ad-slot,.ad-banner,[id^="div-gpt-ad"],ins.adsbygoogle'
       )
       for (var j = 0; j < adElements.length; j++) {
@@ -583,18 +700,18 @@
       }
     }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', observeAdSlots)
+    if (d.readyState === 'loading') {
+      on(d, 'DOMContentLoaded', observeAdSlots)
     } else {
       observeAdSlots()
     }
 
     // Dynamic DOM mutation watcher for client-side injected ads
-    if (typeof MutationObserver !== 'undefined' && document.body) {
+    if (typeof MutationObserver !== 'undefined' && d.body) {
       var mutObs = new MutationObserver(function () {
         observeAdSlots()
       })
-      mutObs.observe(document.body, { childList: true, subtree: true })
+      mutObs.observe(d.body, { childList: true, subtree: true })
     }
 
     return {
@@ -666,13 +783,20 @@
       if (userId) p.user_id = String(userId)
       send('identify', p)
     },
+    debug: function (enable) {
+      isDebugMode = enable !== false
+      try {
+        sessionStorage[isDebugMode ? 'setItem' : 'removeItem']('gravlytics_debug', 'true')
+      } catch (err) {}
+      return isDebugMode
+    },
     page: page,
     ad: adApi,
     ecommerce: ecommerceApi
   }
 
-  window.gravlytics = tracker
-  window.umami = tracker
+  w.gravlytics = tracker
+  w.umami = tracker
 
   // Initial pageview
   if (autoTrack) {

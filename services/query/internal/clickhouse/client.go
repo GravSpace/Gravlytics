@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -87,6 +88,66 @@ func (c *Client) QueryOverview(ctx context.Context, siteID uint64, from, to time
 				HAVING pv = 1
 			)
 		`, siteID, from, to)
+		row.Scan(&bounceSessions)
+		result.BounceRate = float64(bounceSessions) / float64(result.Sessions) * 100
+	}
+
+	return &result, nil
+}
+
+// QueryOverviewWithFilter returns aggregate stats with optional path, country, and device filters
+func (c *Client) QueryOverviewWithFilter(ctx context.Context, siteID uint64, from, to time.Time, path, country, device string) (*OverviewResult, error) {
+	if path == "" && country == "" && device == "" {
+		return c.QueryOverview(ctx, siteID, from, to)
+	}
+
+	whereClause := "site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND event_name = 'pageview'"
+	args := []interface{}{siteID, from, to}
+	argIdx := 4
+
+	if path != "" {
+		whereClause += fmt.Sprintf(" AND startsWith(url_path, $%d)", argIdx)
+		args = append(args, path)
+		argIdx++
+	}
+	if country != "" {
+		whereClause += fmt.Sprintf(" AND country = $%d", argIdx)
+		args = append(args, country)
+		argIdx++
+	}
+	if device != "" {
+		whereClause += fmt.Sprintf(" AND lower(device_type) = lower($%d)", argIdx)
+		args = append(args, device)
+		argIdx++
+	}
+
+	var result OverviewResult
+	querySQL := fmt.Sprintf(`
+		SELECT
+			count() AS pageviews,
+			uniq(visitor_id) AS unique_visitors,
+			uniq(session_id) AS sessions
+		FROM events
+		WHERE %s
+	`, whereClause)
+
+	row := c.conn.QueryRow(ctx, querySQL, args...)
+	if err := row.Scan(&result.Pageviews, &result.UniqueVisitors, &result.Sessions); err != nil {
+		return nil, fmt.Errorf("query filtered overview: %w", err)
+	}
+
+	if result.Sessions > 0 {
+		bounceSQL := fmt.Sprintf(`
+			SELECT count() FROM (
+				SELECT session_id, count() AS pv
+				FROM events
+				WHERE %s
+				GROUP BY session_id
+				HAVING pv = 1
+			)
+		`, whereClause)
+		var bounceSessions uint64
+		row = c.conn.QueryRow(ctx, bounceSQL, args...)
 		row.Scan(&bounceSessions)
 		result.BounceRate = float64(bounceSessions) / float64(result.Sessions) * 100
 	}
@@ -2082,6 +2143,553 @@ func (c *Client) QueryCampaignOverview(ctx context.Context, siteID uint64, from,
 	}
 
 	return res, nil
+}
+
+// ── DebugView Types & Methods ──
+
+type DebugEventItem struct {
+	EventID        string            `json:"event_id"`
+	EventName      string            `json:"event_name"`
+	Timestamp      string            `json:"timestamp"`
+	VisitorID      string            `json:"visitor_id"`
+	SessionID      string            `json:"session_id"`
+	Hostname       string            `json:"hostname"`
+	URLPath        string            `json:"url_path"`
+	ReferrerDomain string            `json:"referrer_domain"`
+	ReferrerPath   string            `json:"referrer_path"`
+	UTMSource      string            `json:"utm_source"`
+	UTMMedium      string            `json:"utm_medium"`
+	UTMCampaign    string            `json:"utm_campaign"`
+	Country        string            `json:"country"`
+	Region         string            `json:"region"`
+	City           string            `json:"city"`
+	DeviceType     string            `json:"device_type"`
+	Browser        string            `json:"browser"`
+	BrowserVersion string            `json:"browser_version"`
+	OS             string            `json:"os"`
+	OSVersion      string            `json:"os_version"`
+	ScreenWidth    uint16            `json:"screen_width"`
+	IsDebug        bool              `json:"is_debug"`
+	Props          map[string]string `json:"props"`
+}
+
+type DebugTimelineBucket struct {
+	Minute string `json:"minute"`
+	Count  uint64 `json:"count"`
+}
+
+type DebugStreamResponse struct {
+	Events          []DebugEventItem      `json:"events"`
+	ActiveSessions  uint64                `json:"active_sessions"`
+	ActiveVisitors  uint64                `json:"active_visitors"`
+	TotalPast30m    uint64                `json:"total_past_30m"`
+	TimelineBuckets []DebugTimelineBucket `json:"timeline_buckets"`
+}
+
+// QueryDebugStream returns real-time event stream and 30-minute timeline for the GA4-style DebugView
+func (c *Client) QueryDebugStream(ctx context.Context, siteID uint64, limit int, onlyDebug bool) (*DebugStreamResponse, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	var resp DebugStreamResponse
+	resp.Events = []DebugEventItem{}
+	resp.TimelineBuckets = []DebugTimelineBucket{}
+
+	thirtyMinAgo := time.Now().UTC().Add(-30 * time.Minute)
+
+	// 1. Overview counts past 30m
+	row := c.conn.QueryRow(ctx, `
+		SELECT
+			uniq(session_id) AS active_sessions,
+			uniq(visitor_id) AS active_visitors,
+			count() AS total_30m
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2
+	`, siteID, thirtyMinAgo)
+	_ = row.Scan(&resp.ActiveSessions, &resp.ActiveVisitors, &resp.TotalPast30m)
+
+	// 2. Timeline buckets (minute by minute for past 30 minutes)
+	bucketRows, err := c.conn.Query(ctx, `
+		SELECT
+			toFormat(toStartOfMinute(timestamp), '%H:%M') AS minute_str,
+			count() AS cnt
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2
+		GROUP BY minute_str
+		ORDER BY minute_str ASC
+	`, siteID, thirtyMinAgo)
+	if err == nil {
+		defer bucketRows.Close()
+		for bucketRows.Next() {
+			var b DebugTimelineBucket
+			if err := bucketRows.Scan(&b.Minute, &b.Count); err == nil {
+				resp.TimelineBuckets = append(resp.TimelineBuckets, b)
+			}
+		}
+	}
+
+	// 3. Events stream
+	whereClause := "site_id = $1"
+	if onlyDebug {
+		whereClause += " AND mapContains(props, 'debug') AND props['debug'] = '1'"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			toString(event_id) AS event_id,
+			event_name,
+			timestamp,
+			visitor_id,
+			session_id,
+			hostname,
+			url_path,
+			referrer_domain,
+			referrer_path,
+			utm_source,
+			utm_medium,
+			utm_campaign,
+			country,
+			region,
+			city,
+			device_type,
+			browser,
+			browser_version,
+			os,
+			os_version,
+			screen_width,
+			props
+		FROM events
+		WHERE %s
+		ORDER BY timestamp DESC
+		LIMIT $2
+	`, whereClause)
+
+	rows, err := c.conn.Query(ctx, query, siteID, limit)
+	if err != nil {
+		return &resp, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var it DebugEventItem
+		var ts time.Time
+		var vid, sid uint64
+		if err := rows.Scan(
+			&it.EventID,
+			&it.EventName,
+			&ts,
+			&vid,
+			&sid,
+			&it.Hostname,
+			&it.URLPath,
+			&it.ReferrerDomain,
+			&it.ReferrerPath,
+			&it.UTMSource,
+			&it.UTMMedium,
+			&it.UTMCampaign,
+			&it.Country,
+			&it.Region,
+			&it.City,
+			&it.DeviceType,
+			&it.Browser,
+			&it.BrowserVersion,
+			&it.OS,
+			&it.OSVersion,
+			&it.ScreenWidth,
+			&it.Props,
+		); err == nil {
+			it.Timestamp = ts.Format(time.RFC3339)
+			it.VisitorID = fmt.Sprintf("%016x", vid)
+			it.SessionID = fmt.Sprintf("%016x", sid)
+			it.IsDebug = it.Props != nil && it.Props["debug"] == "1"
+			resp.Events = append(resp.Events, it)
+		}
+	}
+
+	return &resp, nil
+}
+
+// ── Custom Dimensions & Properties Types & Methods ──
+
+type PropertyKeyItem struct {
+	Key          string   `json:"key"`
+	TotalCount   uint64   `json:"total_count"`
+	UniqueValues uint64   `json:"unique_values"`
+	SampleValues []string `json:"sample_values"`
+}
+
+type PropertyValueItem struct {
+	Value      string  `json:"value"`
+	Count      uint64  `json:"count"`
+	Percentage float64 `json:"percentage"`
+	Visitors   uint64  `json:"visitors"`
+}
+
+type PropertyValueBreakdown struct {
+	Key        string              `json:"key"`
+	TotalCount uint64              `json:"total_count"`
+	Values     []PropertyValueItem `json:"values"`
+}
+
+// QueryAllPropertyKeys retrieves all distinct custom properties discovered across events
+func (c *Client) QueryAllPropertyKeys(ctx context.Context, siteID uint64, from, to time.Time) ([]PropertyKeyItem, error) {
+	rows, err := c.conn.Query(ctx, `
+		SELECT
+			arrayJoin(mapKeys(props)) AS prop_key,
+			count() AS total_count
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND length(props) > 0
+		GROUP BY prop_key
+		ORDER BY total_count DESC
+		LIMIT 50
+	`, siteID, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("query all property keys: %w", err)
+	}
+	defer rows.Close()
+
+	items := []PropertyKeyItem{}
+	for rows.Next() {
+		var it PropertyKeyItem
+		if err := rows.Scan(&it.Key, &it.TotalCount); err == nil {
+			it.SampleValues = []string{}
+			items = append(items, it)
+		}
+	}
+
+	for i := range items {
+		sampleRows, err := c.conn.Query(ctx, `
+			SELECT
+				props[$4] AS val,
+				count() AS cnt
+			FROM events
+			WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+			  AND mapContains(props, $4)
+			GROUP BY val
+			ORDER BY cnt DESC
+			LIMIT 5
+		`, siteID, from, to, items[i].Key)
+		if err == nil {
+			for sampleRows.Next() {
+				var val string
+				var cnt uint64
+				if err := sampleRows.Scan(&val, &cnt); err == nil && val != "" {
+					items[i].SampleValues = append(items[i].SampleValues, val)
+				}
+			}
+			sampleRows.Close()
+		}
+		items[i].UniqueValues = uint64(len(items[i].SampleValues))
+	}
+
+	return items, nil
+}
+
+// QueryPropertyValueBreakdown returns the distribution of values for a given property key
+func (c *Client) QueryPropertyValueBreakdown(ctx context.Context, siteID uint64, propKey string, from, to time.Time, limit int) (*PropertyValueBreakdown, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+
+	var res PropertyValueBreakdown
+	res.Key = propKey
+	res.Values = []PropertyValueItem{}
+
+	_ = c.conn.QueryRow(ctx, `
+		SELECT count()
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND mapContains(props, $4)
+	`, siteID, from, to, propKey).Scan(&res.TotalCount)
+
+	rows, err := c.conn.Query(ctx, `
+		SELECT
+			props[$4] AS val,
+			count() AS cnt,
+			uniq(visitor_id) AS vis
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND mapContains(props, $4)
+		GROUP BY val
+		ORDER BY cnt DESC
+		LIMIT $5
+	`, siteID, from, to, propKey, limit)
+	if err != nil {
+		return &res, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var it PropertyValueItem
+		if err := rows.Scan(&it.Value, &it.Count, &it.Visitors); err == nil {
+			if res.TotalCount > 0 {
+				it.Percentage = float64(it.Count) / float64(res.TotalCount) * 100.0
+			}
+			res.Values = append(res.Values, it)
+		}
+	}
+
+	return &res, nil
+}
+
+// ── Multi-Touch Attribution Modeling Types & Methods ──
+
+type AttributionChannel struct {
+	Channel         string  `json:"channel"`
+	FirstTouchCount uint64  `json:"first_touch_count"`
+	FirstTouchShare float64 `json:"first_touch_share"`
+	LastTouchCount  uint64  `json:"last_touch_count"`
+	LastTouchShare  float64 `json:"last_touch_share"`
+	LinearCount     float64 `json:"linear_count"`
+	LinearShare     float64 `json:"linear_share"`
+}
+
+type AttributionResponse struct {
+	GoalEvent  string               `json:"goal_event"`
+	TotalGoals uint64               `json:"total_goals"`
+	Channels   []AttributionChannel `json:"channels"`
+}
+
+// QueryAttributionModels compares First-Touch, Last-Touch, and Linear attribution across channels
+func (c *Client) QueryAttributionModels(ctx context.Context, siteID uint64, from, to time.Time, goalEvent string) (*AttributionResponse, error) {
+	if goalEvent == "" {
+		goalEvent = "pageview"
+	}
+
+	var resp AttributionResponse
+	resp.GoalEvent = goalEvent
+	resp.Channels = []AttributionChannel{}
+
+	_ = c.conn.QueryRow(ctx, `
+		SELECT count()
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = $4
+	`, siteID, from, to, goalEvent).Scan(&resp.TotalGoals)
+
+	rows, err := c.conn.Query(ctx, `
+		SELECT
+			visitor_id,
+			groupArray(multiIf(utm_source != '', utm_source, referrer_domain != '', referrer_domain, 'direct')) AS touchpoints
+		FROM (
+			SELECT visitor_id, utm_source, referrer_domain, timestamp
+			FROM events
+			WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+			ORDER BY timestamp ASC
+		)
+		GROUP BY visitor_id
+		LIMIT 1000
+	`, siteID, from, to)
+	if err != nil {
+		return &resp, nil
+	}
+	defer rows.Close()
+
+	firstTouchMap := make(map[string]uint64)
+	lastTouchMap := make(map[string]uint64)
+	linearMap := make(map[string]float64)
+	var totalFirst, totalLast uint64
+	var totalLinear float64
+
+	for rows.Next() {
+		var vid uint64
+		var touchpoints []string
+		if err := rows.Scan(&vid, &touchpoints); err == nil && len(touchpoints) > 0 {
+			first := touchpoints[0]
+			firstTouchMap[first]++
+			totalFirst++
+
+			last := touchpoints[len(touchpoints)-1]
+			lastTouchMap[last]++
+			totalLast++
+
+			weight := 1.0 / float64(len(touchpoints))
+			for _, tp := range touchpoints {
+				linearMap[tp] += weight
+				totalLinear += weight
+			}
+		}
+	}
+
+	allChannels := make(map[string]bool)
+	for ch := range firstTouchMap {
+		allChannels[ch] = true
+	}
+	for ch := range lastTouchMap {
+		allChannels[ch] = true
+	}
+	for ch := range linearMap {
+		allChannels[ch] = true
+	}
+
+	for ch := range allChannels {
+		ftCount := firstTouchMap[ch]
+		ltCount := lastTouchMap[ch]
+		linCount := linearMap[ch]
+
+		var ftShare, ltShare, linShare float64
+		if totalFirst > 0 {
+			ftShare = float64(ftCount) / float64(totalFirst) * 100.0
+		}
+		if totalLast > 0 {
+			ltShare = float64(ltCount) / float64(totalLast) * 100.0
+		}
+		if totalLinear > 0 {
+			linShare = linCount / totalLinear * 100.0
+		}
+
+		resp.Channels = append(resp.Channels, AttributionChannel{
+			Channel:         ch,
+			FirstTouchCount: ftCount,
+			FirstTouchShare: ftShare,
+			LastTouchCount:  ltCount,
+			LastTouchShare:  ltShare,
+			LinearCount:     math.Round(linCount*10) / 10,
+			LinearShare:     linShare,
+		})
+	}
+
+	sort.Slice(resp.Channels, func(i, j int) bool {
+		if resp.Channels[i].FirstTouchCount != resp.Channels[j].FirstTouchCount {
+			return resp.Channels[i].FirstTouchCount > resp.Channels[j].FirstTouchCount
+		}
+		return resp.Channels[i].LinearCount > resp.Channels[j].LinearCount
+	})
+
+	return &resp, nil
+}
+
+// ── Segment Comparison Types & Methods ──
+
+type SegmentMetrics struct {
+	Name           string          `json:"name"`
+	Visitors       uint64          `json:"visitors"`
+	Pageviews      uint64          `json:"pageviews"`
+	Sessions       uint64          `json:"sessions"`
+	BounceRate     float64         `json:"bounce_rate"`
+	AvgDurationSec uint64          `json:"avg_duration_sec"`
+	TopPages       []BreakdownItem `json:"top_pages"`
+	TopReferrers   []BreakdownItem `json:"top_referrers"`
+}
+
+type SegmentComparisonResponse struct {
+	SegmentA SegmentMetrics `json:"segment_a"`
+	SegmentB SegmentMetrics `json:"segment_b"`
+}
+
+func (c *Client) querySingleSegment(ctx context.Context, siteID uint64, from, to time.Time, filterType, filterVal, name string) SegmentMetrics {
+	var m SegmentMetrics
+	m.Name = name
+	m.TopPages = []BreakdownItem{}
+	m.TopReferrers = []BreakdownItem{}
+
+	col := "device_type"
+	if filterType == "country" {
+		col = "country"
+	} else if filterType == "source" {
+		col = "referrer_domain"
+	} else if filterType == "browser" {
+		col = "browser"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT
+			countIf(event_name = 'pageview') AS pageviews,
+			uniq(visitor_id) AS visitors,
+			uniq(session_id) AS sessions
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND lower(%s) = lower($4)
+	`, col)
+
+	_ = c.conn.QueryRow(ctx, query, siteID, from, to, filterVal).Scan(&m.Pageviews, &m.Visitors, &m.Sessions)
+
+	if m.Sessions > 0 {
+		bounceQuery := fmt.Sprintf(`
+			SELECT count() FROM (
+				SELECT session_id, count() AS pv
+				FROM events
+				WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+				  AND event_name = 'pageview'
+				  AND lower(%s) = lower($4)
+				GROUP BY session_id
+				HAVING pv = 1
+			)
+		`, col)
+		var bounceSessions uint64
+		_ = c.conn.QueryRow(ctx, bounceQuery, siteID, from, to, filterVal).Scan(&bounceSessions)
+		m.BounceRate = float64(bounceSessions) / float64(m.Sessions) * 100.0
+	}
+
+	// Top pages for segment
+	pagesQuery := fmt.Sprintf(`
+		SELECT url_path, count() AS pv, uniq(visitor_id) AS vis
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = 'pageview'
+		  AND lower(%s) = lower($4)
+		GROUP BY url_path
+		ORDER BY pv DESC
+		LIMIT 5
+	`, col)
+	if rows, err := c.conn.Query(ctx, pagesQuery, siteID, from, to, filterVal); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it BreakdownItem
+			if err := rows.Scan(&it.Value, &it.Pageviews, &it.UniqueVisitors); err == nil {
+				m.TopPages = append(m.TopPages, it)
+			}
+		}
+	}
+
+	// Top referrers for segment
+	refQuery := fmt.Sprintf(`
+		SELECT referrer_domain, count() AS pv, uniq(visitor_id) AS vis
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND lower(%s) = lower($4) AND referrer_domain != ''
+		GROUP BY referrer_domain
+		ORDER BY pv DESC
+		LIMIT 5
+	`, col)
+	if rows, err := c.conn.Query(ctx, refQuery, siteID, from, to, filterVal); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it BreakdownItem
+			if err := rows.Scan(&it.Value, &it.Pageviews, &it.UniqueVisitors); err == nil {
+				m.TopReferrers = append(m.TopReferrers, it)
+			}
+		}
+	}
+
+	return m
+}
+
+// QuerySegmentComparison compares two audience segments side-by-side
+func (c *Client) QuerySegmentComparison(ctx context.Context, siteID uint64, from, to time.Time, segmentA, segmentB string) (*SegmentComparisonResponse, error) {
+	// Parse segment expressions, e.g. "device:mobile" vs "device:desktop"
+	parseSegment := func(seg, defaultType, defaultVal string) (string, string) {
+		parts := strings.SplitN(seg, ":", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1]
+		}
+		return defaultType, defaultVal
+	}
+
+	typeA, valA := parseSegment(segmentA, "device", "mobile")
+	typeB, valB := parseSegment(segmentB, "device", "desktop")
+
+	nameA := fmt.Sprintf("%s (%s)", strings.Title(valA), typeA)
+	nameB := fmt.Sprintf("%s (%s)", strings.Title(valB), typeB)
+
+	resp := &SegmentComparisonResponse{
+		SegmentA: c.querySingleSegment(ctx, siteID, from, to, typeA, valA, nameA),
+		SegmentB: c.querySingleSegment(ctx, siteID, from, to, typeB, valB, nameB),
+	}
+
+	return resp, nil
 }
 
 // Close closes the connection

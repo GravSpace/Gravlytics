@@ -9,7 +9,8 @@
 		Filter,
 		RefreshCw,
 		Eye,
-		HelpCircle
+		HelpCircle,
+		ChevronDown
 	} from '@lucide/svelte';
 	import { siteStore } from '$lib/stores/site.svelte';
 	import { dateStore } from '$lib/stores/date.svelte';
@@ -30,7 +31,7 @@
 	let isLoading = $state(true);
 
 	async function loadHeatmapAndScroll() {
-		const siteId = siteStore.activeSiteId;
+		const siteId = siteStore.currentSite?.trackingId || siteStore.activeSiteId;
 		if (!siteId) return;
 		isLoading = true;
 		try {
@@ -51,7 +52,7 @@
 	}
 
 	$effect(() => {
-		const s = siteStore.activeSiteId;
+		const s = siteStore.currentSite?.trackingId || siteStore.activeSiteId;
 		const v = dateStore.version;
 		const p = selectedPath;
 		if (s) {
@@ -86,13 +87,13 @@
 		</div>
 
 		<!-- Path selector and refresh -->
-		<div class="flex items-center gap-2.5">
-			<div class="flex items-center gap-1.5 rounded-lg border border-themed bg-card px-2.5 py-1 text-xs">
-				<Globe size={13} class="text-indigo-400" />
+		<div class="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+			<div class="relative flex items-center rounded-lg border border-themed bg-card px-2.5 py-1.5 text-xs shadow-xs hover:border-themed-strong focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+				<Globe size={14} class="text-primary shrink-0 mr-1.5" />
 				<select
 					bind:value={selectedPath}
 					onchange={loadHeatmapAndScroll}
-					class="bg-transparent font-mono text-xs text-heading focus:outline-none cursor-pointer"
+					class="w-48 sm:w-60 bg-transparent font-mono text-xs text-heading focus:outline-none cursor-pointer pr-5 appearance-none truncate"
 				>
 					<option value="/">/ (Homepage)</option>
 					{#each availablePages as page}
@@ -101,13 +102,16 @@
 						{/if}
 					{/each}
 				</select>
+				<div class="pointer-events-none absolute right-2 text-label">
+					<ChevronDown size={13} />
+				</div>
 			</div>
 
 			<button
 				type="button"
 				onclick={loadHeatmapAndScroll}
 				disabled={isLoading}
-				class="btn-ghost flex items-center gap-1.5 rounded-lg border border-themed px-3 py-1.5 text-xs text-body hover:text-heading cursor-pointer shadow-sm"
+				class="btn-ghost flex items-center gap-1.5 rounded-lg border border-themed px-3 py-1.5 text-xs text-body hover:text-heading cursor-pointer shadow-xs transition-colors shrink-0"
 			>
 				<RefreshCw size={13} class={isLoading ? 'animate-spin' : ''} />
 				<span>Refresh</span>

@@ -95,7 +95,7 @@
 	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 		<div>
 			<div class="flex items-center gap-2">
-				<div class="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+				<div class="p-2 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-600 dark:text-sky-400">
 					<Megaphone size={20} />
 				</div>
 				<div>
@@ -192,16 +192,16 @@
 								<td class="py-3 px-4 text-right text-heading font-mono font-medium">
 									{slot.viewed.toLocaleString()}
 								</td>
-								<td class="py-3 px-4 text-right font-mono font-medium {slot.fill_rate >= 80 ? 'text-emerald-400' : slot.fill_rate >= 60 ? 'text-amber-400' : 'text-rose-400'}">
+								<td class="py-3 px-4 text-right font-mono font-medium {slot.fill_rate >= 80 ? 'text-emerald-700 dark:text-emerald-300' : slot.fill_rate >= 60 ? 'text-orange-700 dark:text-orange-300' : 'text-rose-700 dark:text-rose-300'}">
 									{slot.fill_rate.toFixed(1)}%
 								</td>
-								<td class="py-3 px-4 text-right font-mono font-medium {slot.viewability >= 70 ? 'text-emerald-400' : slot.viewability >= 50 ? 'text-amber-400' : 'text-rose-400'}">
+								<td class="py-3 px-4 text-right font-mono font-medium {slot.viewability >= 70 ? 'text-emerald-700 dark:text-emerald-300' : slot.viewability >= 50 ? 'text-orange-700 dark:text-orange-300' : 'text-rose-700 dark:text-rose-300'}">
 									{slot.viewability.toFixed(1)}%
 								</td>
 								<td class="py-3 px-4 text-right text-label font-mono">
 									{slot.clicks.toLocaleString()}
 								</td>
-								<td class="py-3 px-4 text-right text-cyan-400 font-mono font-medium">
+								<td class="py-3 px-4 text-right text-sky-600 dark:text-sky-400 font-mono font-semibold">
 									{slot.ctr.toFixed(2)}%
 								</td>
 								<td class="py-3 px-4 text-right text-label font-mono">
@@ -212,7 +212,7 @@
 					{:else}
 						<tr>
 							<td colspan="9" class="py-8 text-center text-label text-xs">
-								No ad slot data recorded for this period. Add <code class="text-cyan-400">data-gravlytics-ad-slot</code> attributes to ad elements on your website.
+								No ad slot data recorded for this period. Add <code class="text-sky-600 dark:text-sky-400 font-mono">data-gravlytics-ad-slot</code> attributes to ad elements on your website.
 							</td>
 						</tr>
 					{/if}
@@ -225,7 +225,7 @@
 	<div class="rounded-xl border border-themed bg-card p-5 space-y-4">
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-2">
-				<Code size={18} class="text-cyan-400" />
+				<Code size={18} class="text-primary" />
 				<h3 class="text-sm font-semibold text-heading">Ad Placement & Viewability Integration Guide</h3>
 			</div>
 			<button

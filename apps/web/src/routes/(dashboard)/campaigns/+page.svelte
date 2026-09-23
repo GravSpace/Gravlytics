@@ -308,7 +308,7 @@
 					{/if}
 				</button>
 			</div>
-			<div class="p-2.5 rounded-lg bg-input font-mono text-xs text-indigo-300 break-all select-all border border-themed/60">
+			<div class="p-2.5 rounded-lg bg-input font-mono text-xs text-primary font-medium break-all select-all border border-themed/60">
 				{generatedUrl}
 			</div>
 		</div>

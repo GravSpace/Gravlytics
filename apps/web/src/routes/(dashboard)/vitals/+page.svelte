@@ -71,12 +71,12 @@
 
 	function getStatusBadge(status: string) {
 		if (status === 'good') {
-			return { label: 'Good', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' };
+			return { label: 'Good', bg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20' };
 		}
 		if (status === 'needs-improvement') {
-			return { label: 'Needs Improvement', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
+			return { label: 'Needs Improvement', bg: 'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20' };
 		}
-		return { label: 'Poor', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20' };
+		return { label: 'Poor', bg: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20' };
 	}
 </script>
 
@@ -85,7 +85,7 @@
 	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 		<div>
 			<div class="flex items-center gap-2">
-				<div class="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+				<div class="p-2 rounded-lg bg-primary/10 border border-primary/20 text-primary">
 					<Gauge size={20} />
 				</div>
 				<div>
@@ -110,13 +110,13 @@
 	</div>
 
 	<!-- Info Note -->
-	<div class="p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 flex items-start gap-3">
-		<div class="text-indigo-400 mt-0.5">
+	<div class="p-3.5 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
+		<div class="text-primary mt-0.5">
 			<Zap size={16} />
 		</div>
 		<div class="text-xs text-label leading-relaxed">
 			<span class="font-semibold text-heading">Zero-Overhead & Automatic:</span> The
-			<code class="px-1 py-0.5 rounded bg-card border border-themed text-[11px] font-mono text-indigo-400">gravlytics.js</code>
+			<code class="px-1 py-0.5 rounded bg-card border border-themed text-[11px] font-mono text-primary font-semibold">gravlytics.js</code>
 			tracking script automatically captures Core Web Vitals via the native browser
 			<code class="text-[11px] font-mono">PerformanceObserver</code> API. Aggregations calculate the 75th percentile (P75) adhering to Google Search Console and SEO ranking criteria.
 		</div>
@@ -220,13 +220,13 @@
 									<td class="py-3 px-4 text-right text-label font-mono">
 										{page.samples.toLocaleString()}
 									</td>
-									<td class="py-3 px-4 text-right font-mono {(page.lcp ?? 0) <= 2500 ? 'text-emerald-400' : (page.lcp ?? 0) <= 4000 ? 'text-amber-400' : 'text-rose-400'}">
+									<td class="py-3 px-4 text-right font-mono {(page.lcp ?? 0) <= 2500 ? 'text-emerald-600 dark:text-emerald-400' : (page.lcp ?? 0) <= 4000 ? 'text-orange-600 dark:text-orange-400' : 'text-rose-600 dark:text-rose-400'}">
 										{formatMetricValue('LCP', page.lcp)}
 									</td>
-									<td class="py-3 px-4 text-right font-mono {(page.cls ?? 0) <= 0.1 ? 'text-emerald-400' : (page.cls ?? 0) <= 0.25 ? 'text-amber-400' : 'text-rose-400'}">
+									<td class="py-3 px-4 text-right font-mono {(page.cls ?? 0) <= 0.1 ? 'text-emerald-600 dark:text-emerald-400' : (page.cls ?? 0) <= 0.25 ? 'text-orange-600 dark:text-orange-400' : 'text-rose-600 dark:text-rose-400'}">
 										{(page.cls ?? 0).toFixed(3)}
 									</td>
-									<td class="py-3 px-4 text-right font-mono {(page.inp ?? 0) <= 200 ? 'text-emerald-400' : (page.inp ?? 0) <= 500 ? 'text-amber-400' : 'text-rose-400'}">
+									<td class="py-3 px-4 text-right font-mono {(page.inp ?? 0) <= 200 ? 'text-emerald-600 dark:text-emerald-400' : (page.inp ?? 0) <= 500 ? 'text-orange-600 dark:text-orange-400' : 'text-rose-600 dark:text-rose-400'}">
 										{formatMetricValue('INP', page.inp)}
 									</td>
 									<td class="py-3 px-4 text-center">
@@ -250,13 +250,13 @@
 	{:else}
 		<!-- Empty State with Instructions -->
 		<div class="p-8 rounded-xl border border-themed bg-card text-center space-y-4">
-			<div class="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto">
+			<div class="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
 				<Gauge size={24} />
 			</div>
 			<div class="max-w-md mx-auto space-y-1">
 				<h3 class="text-sm font-semibold text-heading">Awaiting First Web Vitals Samples</h3>
 				<p class="text-xs text-label leading-relaxed">
-					Core Web Vitals metrics are dispatched automatically when visitors load pages and navigate. Verify that the latest <code class="text-indigo-400">gravlytics.js</code> tracking script is active on your site.
+					Core Web Vitals metrics are dispatched automatically when visitors load pages and navigate. Verify that the latest <code class="text-primary font-semibold">gravlytics.js</code> tracking script is active on your site.
 				</p>
 			</div>
 

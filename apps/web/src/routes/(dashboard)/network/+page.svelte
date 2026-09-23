@@ -32,7 +32,10 @@
 	);
 	const avgBounceRate = $derived(
 		portfolioSites.length > 0
-			? (portfolioSites.reduce((acc, s) => acc + (s.stats?.bounceRate || 0), 0) / portfolioSites.length).toFixed(1)
+			? (
+					portfolioSites.reduce((acc, s) => acc + (s.stats?.bounceRate || 0), 0) /
+					portfolioSites.length
+				).toFixed(1)
 			: '0.0'
 	);
 
@@ -89,24 +92,28 @@
 	<title>Multi-Domain Network Portfolio — Gravlytics</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 max-w-6xl">
+<div class="flex max-w-full flex-col gap-6">
 	<!-- Page Header -->
-	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+	<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
 		<div class="flex flex-col">
 			<div class="flex items-center gap-2">
-				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+				<div
+					class="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
+				>
 					<Layers size={18} />
 				</div>
-				<h1 class="text-xl font-bold tracking-tight text-heading">Multi-Domain Network Portfolio</h1>
+				<h1 class="text-heading text-xl font-bold tracking-tight">
+					Multi-Domain Network Portfolio
+				</h1>
 			</div>
-			<p class="text-xs text-label mt-1">
+			<p class="text-label mt-1 text-xs">
 				Consolidated performance rollup across all web properties managed in your workspace.
 			</p>
 		</div>
 
 		<a
 			href="/settings/sites"
-			class="flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+			class="flex items-center gap-1.5 self-start rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-indigo-500 sm:self-auto"
 		>
 			<Plus size={14} />
 			<span>Add Domain</span>
@@ -114,57 +121,71 @@
 	</div>
 
 	<!-- Top Aggregate Metrics Cards -->
-	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-		<div class="card p-4 flex flex-col justify-between">
-			<span class="text-xs font-medium text-label">Total Network Visitors</span>
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+		<div class="card flex flex-col justify-between p-4">
+			<span class="text-label text-xs font-medium">Total Network Visitors</span>
 			<div class="mt-2 flex items-baseline justify-between">
-				<p class="text-2xl font-bold tracking-tight text-heading font-mono">{totalVisitors.toLocaleString()}</p>
-				<div class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+				<p class="text-heading font-mono text-2xl font-bold tracking-tight">
+					{totalVisitors.toLocaleString()}
+				</p>
+				<div
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
+				>
 					<Users size={14} />
 				</div>
 			</div>
-			<span class="mt-2 text-[10px] text-hint">Last 30 days aggregate</span>
+			<span class="text-hint mt-2 text-[10px]">Last 30 days aggregate</span>
 		</div>
 
-		<div class="card p-4 flex flex-col justify-between">
-			<span class="text-xs font-medium text-label">Total Pageviews</span>
+		<div class="card flex flex-col justify-between p-4">
+			<span class="text-label text-xs font-medium">Total Pageviews</span>
 			<div class="mt-2 flex items-baseline justify-between">
-				<p class="text-2xl font-bold tracking-tight text-heading font-mono">{totalPageviews.toLocaleString()}</p>
-				<div class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+				<p class="text-heading font-mono text-2xl font-bold tracking-tight">
+					{totalPageviews.toLocaleString()}
+				</p>
+				<div
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+				>
 					<Eye size={14} />
 				</div>
 			</div>
-			<span class="mt-2 text-[10px] text-hint">Across all sites</span>
+			<span class="text-hint mt-2 text-[10px]">Across all sites</span>
 		</div>
 
-		<div class="card p-4 flex flex-col justify-between">
-			<span class="text-xs font-medium text-label">Tracked Domains</span>
+		<div class="card flex flex-col justify-between p-4">
+			<span class="text-label text-xs font-medium">Tracked Domains</span>
 			<div class="mt-2 flex items-baseline justify-between">
-				<p class="text-2xl font-bold tracking-tight text-heading font-mono">{portfolioSites.length}</p>
-				<div class="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+				<p class="text-heading font-mono text-2xl font-bold tracking-tight">
+					{portfolioSites.length}
+				</p>
+				<div
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+				>
 					<Globe size={14} />
 				</div>
 			</div>
-			<span class="mt-2 text-[10px] text-hint">Active properties</span>
+			<span class="text-hint mt-2 text-[10px]">Active properties</span>
 		</div>
 
-		<div class="card p-4 flex flex-col justify-between">
-			<span class="text-xs font-medium text-label">Avg Bounce Rate</span>
+		<div class="card flex flex-col justify-between p-4">
+			<span class="text-label text-xs font-medium">Avg Bounce Rate</span>
 			<div class="mt-2 flex items-baseline justify-between">
-				<p class="text-2xl font-bold tracking-tight text-heading font-mono">{avgBounceRate}%</p>
-				<div class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+				<p class="text-heading font-mono text-2xl font-bold tracking-tight">{avgBounceRate}%</p>
+				<div
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-orange-500/20 bg-orange-500/10 text-orange-600 dark:text-orange-400"
+				>
 					<Activity size={14} />
 				</div>
 			</div>
-			<span class="mt-2 text-[10px] text-hint">Network average</span>
+			<span class="text-hint mt-2 text-[10px]">Network average</span>
 		</div>
 	</div>
 
 	<!-- Domain Leaderboard Table -->
-	<div class="card p-5 flex flex-col gap-4">
-		<div class="flex items-center justify-between border-b border-themed pb-3">
-			<h2 class="text-sm font-bold text-heading">Domain Performance Leaderboard</h2>
-			<span class="text-[11px] text-hint">Sorted by 30-day visitors</span>
+	<div class="card flex flex-col gap-4 p-5">
+		<div class="border-themed flex items-center justify-between border-b pb-3">
+			<h2 class="text-heading text-sm font-bold">Domain Performance Leaderboard</h2>
+			<span class="text-hint text-[11px]">Sorted by 30-day visitors</span>
 		</div>
 
 		{#if isLoading}
@@ -172,17 +193,24 @@
 				<Clock size={20} class="animate-spin text-indigo-400" />
 			</div>
 		{:else if portfolioSites.length === 0}
-			<div class="p-10 text-center flex flex-col items-center">
-				<Globe size={24} class="text-slate-500 mb-2" />
-				<h3 class="text-sm font-semibold text-heading">No sites registered yet</h3>
-				<p class="text-xs text-label mt-1 mb-4">Register your first website domain to see cross-site telemetry rollup.</p>
-				<a href="/settings/sites" class="rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white">
+			<div class="flex flex-col items-center p-10 text-center">
+				<Globe size={24} class="mb-2 text-slate-500" />
+				<h3 class="text-heading text-sm font-semibold">No sites registered yet</h3>
+				<p class="text-label mt-1 mb-4 text-xs">
+					Register your first website domain to see cross-site telemetry rollup.
+				</p>
+				<a
+					href="/settings/sites"
+					class="rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white"
+				>
 					Register Site
 				</a>
 			</div>
 		{:else}
-			<div class="rounded-lg border border-themed divide-y divide-themed overflow-hidden">
-				<div class="grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-semibold text-label bg-sidebar">
+			<div class="border-themed divide-themed divide-y overflow-hidden rounded-lg border">
+				<div
+					class="text-label bg-sidebar grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-semibold"
+				>
 					<span class="col-span-5">Domain & Property</span>
 					<span class="col-span-2 text-right">Visitors</span>
 					<span class="col-span-2 text-right">Pageviews</span>
@@ -191,26 +219,30 @@
 				</div>
 
 				{#each [...portfolioSites].sort((a, b) => (b.stats?.visitors || 0) - (a.stats?.visitors || 0)) as site}
-					<div class="grid grid-cols-12 gap-3 p-3 px-4 items-center text-xs hover:bg-card-hover transition-colors">
+					<div
+						class="hover:bg-card-hover grid grid-cols-12 items-center gap-3 p-3 px-4 text-xs transition-colors"
+					>
 						<div class="col-span-5 flex items-center gap-2.5">
-							<div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+							<div
+								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
+							>
 								<Globe size={13} />
 							</div>
 							<div class="flex flex-col truncate">
-								<span class="font-semibold text-heading truncate">{site.name}</span>
-								<span class="font-mono text-[11px] text-label truncate">{site.domain}</span>
+								<span class="text-heading truncate font-semibold">{site.name}</span>
+								<span class="text-label truncate font-mono text-[11px]">{site.domain}</span>
 							</div>
 						</div>
 
-						<div class="col-span-2 text-right font-mono text-body">
+						<div class="text-body col-span-2 text-right font-mono">
 							{site.stats ? site.stats.visitors.toLocaleString() : '—'}
 						</div>
 
-						<div class="col-span-2 text-right font-mono text-indigo-400 font-semibold">
+						<div class="col-span-2 text-right font-mono font-semibold text-indigo-400">
 							{site.stats ? site.stats.pageviews.toLocaleString() : '—'}
 						</div>
 
-						<div class="col-span-1 text-right font-mono text-hint">
+						<div class="text-hint col-span-1 text-right font-mono">
 							{site.stats ? `${site.stats.bounceRate}%` : '—'}
 						</div>
 
@@ -218,7 +250,7 @@
 							<button
 								type="button"
 								onclick={() => selectAndNavigate(site)}
-								class="flex items-center gap-1 rounded bg-input px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-heading hover:bg-card-hover transition-colors"
+								class="bg-input hover:text-heading hover:bg-card-hover flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors"
 							>
 								<span>Dashboard</span>
 								<ArrowRight size={11} />

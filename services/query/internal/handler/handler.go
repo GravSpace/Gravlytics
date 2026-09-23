@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gravlytics/query/internal/cache"
@@ -31,8 +32,12 @@ func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	path := r.URL.Query().Get("path")
+	country := r.URL.Query().Get("country")
+	device := r.URL.Query().Get("device")
+
 	// Check cache
-	cacheKey := fmt.Sprintf("overview:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	cacheKey := fmt.Sprintf("overview:%d:%s:%s:%s:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"), path, country, device)
 	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Cache", "HIT")
@@ -40,7 +45,7 @@ func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.ch.QueryOverview(r.Context(), siteID, from, to)
+	result, err := h.ch.QueryOverviewWithFilter(r.Context(), siteID, from, to, path, country, device)
 	if err != nil {
 		h.logger.Error("query overview failed", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -555,7 +560,227 @@ func (h *Handler) CampaignOverview(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
 }
 
+// DebugView returns live event telemetry and 30-minute timeline for the DebugView inspector
+func (h *Handler) DebugView(w http.ResponseWriter, r *http.Request) {
+	siteIDStr := r.URL.Query().Get("site_id")
+	if siteIDStr == "" {
+		http.Error(w, "missing site_id", http.StatusBadRequest)
+		return
+	}
+	siteID := hashSiteID(siteIDStr)
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
+			limit = parsed
+		}
+	}
+
+	onlyDebug := r.URL.Query().Get("only_debug") == "true" || r.URL.Query().Get("only_debug") == "1"
+
+	result, err := h.ch.QueryDebugStream(r.Context(), siteID, limit, onlyDebug)
+	if err != nil {
+		h.logger.Error("query debug stream failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Short cache for live inspector (1 second)
+	cacheKey := fmt.Sprintf("debugview:%d:%d:%t", siteID, limit, onlyDebug)
+	h.respondJSON(w, r.Context(), cacheKey, result, 1*time.Second)
+}
+
+// PropertyKeys returns all distinct custom event properties discovered
+func (h *Handler) PropertyKeys(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("prop_keys:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	items, err := h.ch.QueryAllPropertyKeys(r.Context(), siteID, from, to)
+	if err != nil {
+		h.logger.Error("query property keys failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, items, 30*time.Second)
+}
+
+// PropertyValues returns value distribution for a specific custom property key
+func (h *Handler) PropertyValues(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		http.Error(w, "missing property key", http.StatusBadRequest)
+		return
+	}
+
+	limit := 30
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
+			limit = parsed
+		}
+	}
+
+	cacheKey := fmt.Sprintf("prop_vals:%d:%s:%s:%s:%d", siteID, from.Format("20060102"), to.Format("20060102"), key, limit)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	breakdown, err := h.ch.QueryPropertyValueBreakdown(r.Context(), siteID, key, from, to, limit)
+	if err != nil {
+		h.logger.Error("query property values breakdown failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, breakdown, 30*time.Second)
+}
+
+// Attribution computes channel contribution comparing First-Touch, Last-Touch, and Linear models
+func (h *Handler) Attribution(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	goalEvent := r.URL.Query().Get("goal")
+	if goalEvent == "" {
+		goalEvent = "pageview"
+	}
+
+	cacheKey := fmt.Sprintf("attr:%d:%s:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"), goalEvent)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	resp, err := h.ch.QueryAttributionModels(r.Context(), siteID, from, to, goalEvent)
+	if err != nil {
+		h.logger.Error("query attribution failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, resp, 30*time.Second)
+}
+
+// SegmentComparison compares two audience segments side-by-side
+func (h *Handler) SegmentComparison(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	segA := r.URL.Query().Get("segment_a")
+	segB := r.URL.Query().Get("segment_b")
+	if segA == "" {
+		segA = "device:mobile"
+	}
+	if segB == "" {
+		segB = "device:desktop"
+	}
+
+	cacheKey := fmt.Sprintf("seg_cmp:%d:%s:%s:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"), segA, segB)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	resp, err := h.ch.QuerySegmentComparison(r.Context(), siteID, from, to, segA, segB)
+	if err != nil {
+		h.logger.Error("query segment comparison failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, resp, 30*time.Second)
+}
+
 // parseParams extracts common query parameters
+func parseDateOrRelative(s string, now time.Time, isTo bool) (time.Time, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		if isTo {
+			return now, nil
+		}
+		return now.AddDate(0, 0, -30), nil
+	}
+
+	switch s {
+	case "today":
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		if isTo {
+			return start.Add(24*time.Hour - time.Millisecond), nil
+		}
+		return start, nil
+	case "yesterday":
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1)
+		if isTo {
+			return start.Add(24*time.Hour - time.Millisecond), nil
+		}
+		return start, nil
+	case "24h", "1d":
+		return now.Add(-24 * time.Hour), nil
+	case "7d":
+		return now.AddDate(0, 0, -7), nil
+	case "30d":
+		return now.AddDate(0, 0, -30), nil
+	case "90d":
+		return now.AddDate(0, 0, -90), nil
+	case "12m", "1y", "365d":
+		return now.AddDate(-1, 0, 0), nil
+	}
+
+	// Check if ending with 'd' (e.g. 14d)
+	if strings.HasSuffix(s, "d") {
+		if days, err := strconv.Atoi(strings.TrimSuffix(s, "d")); err == nil && days > 0 {
+			return now.AddDate(0, 0, -days), nil
+		}
+	}
+
+	// Try standard date formats
+	formats := []string{
+		"2006-01-02",
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+	}
+	for _, fmtStr := range formats {
+		if parsed, err := time.Parse(fmtStr, s); err == nil {
+			if isTo && fmtStr == "2006-01-02" {
+				return parsed.Add(24*time.Hour - time.Millisecond), nil
+			}
+			return parsed, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid date format: %s", s)
+}
+
 func (h *Handler) parseParams(r *http.Request) (uint64, time.Time, time.Time, error) {
 	siteIDStr := r.URL.Query().Get("site_id")
 	if siteIDStr == "" {
@@ -565,24 +790,15 @@ func (h *Handler) parseParams(r *http.Request) (uint64, time.Time, time.Time, er
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 
-	// Default: last 30 days
 	now := time.Now().UTC()
-	from := now.AddDate(0, 0, -30)
-	to := now
-
-	if fromStr != "" {
-		parsed, err := time.Parse("2006-01-02", fromStr)
-		if err != nil {
-			return 0, time.Time{}, time.Time{}, fmt.Errorf("invalid from date: %s", fromStr)
-		}
-		from = parsed
+	from, err := parseDateOrRelative(fromStr, now, false)
+	if err != nil {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("invalid from date: %s", fromStr)
 	}
-	if toStr != "" {
-		parsed, err := time.Parse("2006-01-02", toStr)
-		if err != nil {
-			return 0, time.Time{}, time.Time{}, fmt.Errorf("invalid to date: %s", toStr)
-		}
-		to = parsed.Add(24*time.Hour - time.Millisecond) // End of day
+
+	to, err := parseDateOrRelative(toStr, now, true)
+	if err != nil {
+		return 0, time.Time{}, time.Time{}, fmt.Errorf("invalid to date: %s", toStr)
 	}
 
 	return hashSiteID(siteIDStr), from, to, nil

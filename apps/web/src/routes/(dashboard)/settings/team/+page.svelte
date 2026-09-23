@@ -16,6 +16,7 @@
 		AlertCircle
 	} from '@lucide/svelte';
 	import { onMount } from 'svelte';
+	import SettingsTabs from '$lib/components/SettingsTabs.svelte';
 
 	interface MemberItem {
 		id: string;
@@ -150,28 +151,7 @@
 	</div>
 
 	<!-- Navigation Tabs -->
-	<div class="flex items-center gap-1.5 border-b border-themed pb-2 text-xs overflow-x-auto no-scrollbar">
-		<a href="/settings/profile" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<User size={13} />
-			<span>Profile</span>
-		</a>
-		<a href="/settings" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Sliders size={13} />
-			<span>General</span>
-		</a>
-		<a href="/settings/sites" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Globe size={13} />
-			<span>Sites</span>
-		</a>
-		<a href="/settings/team" class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white shadow-sm whitespace-nowrap shrink-0">
-			<Users size={13} />
-			<span>Team</span>
-		</a>
-		<a href="/settings/api-keys" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Key size={13} />
-			<span>API Keys</span>
-		</a>
-	</div>
+	<SettingsTabs />
 
 	<!-- Active Organization Info -->
 	{#if organization}
@@ -209,12 +189,12 @@
 									<h3 class="text-xs font-semibold text-heading">{member.name}</h3>
 									<span
 										class="rounded px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase {member.role === 'Owner'
-											? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+											? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
 											: member.role === 'Admin'
-											? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+											? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20'
 											: member.role === 'Editor'
-											? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
-											: 'bg-slate-500/15 text-slate-400 border border-slate-500/30'}"
+											? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20'
+											: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'}"
 									>
 										{member.role}
 									</span>

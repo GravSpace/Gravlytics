@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS sites (
     salt            VARCHAR(64) NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'),
     salt_rotated_at DATE NOT NULL DEFAULT CURRENT_DATE,
     public          BOOLEAN NOT NULL DEFAULT FALSE,      -- Public dashboard?
+    share_password_hash VARCHAR(255),                    -- Optional scrypt password hash for public dashboard
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -141,6 +142,50 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
+
+-- ── Alerts ──
+CREATE TABLE IF NOT EXISTS alerts (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id         UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    name            VARCHAR(255) NOT NULL,
+    metric          VARCHAR(50) NOT NULL,
+    condition       VARCHAR(20) NOT NULL DEFAULT 'greater_than',
+    threshold       INT NOT NULL,
+    window_minutes  INT NOT NULL DEFAULT 60,
+    webhook_url     TEXT NOT NULL,
+    enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+    last_triggered_at TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_alerts_site ON alerts(site_id);
+
+-- ── Audit logs ──
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id          UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id         UUID REFERENCES users(id) ON DELETE SET NULL,
+    action          VARCHAR(100) NOT NULL,
+    details         JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_org ON audit_logs(org_id);
+CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
+
+-- ── Site annotations ──
+CREATE TABLE IF NOT EXISTS site_annotations (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id         UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    date            VARCHAR(50) NOT NULL,
+    title           VARCHAR(255) NOT NULL,
+    description     TEXT,
+    category        VARCHAR(50) NOT NULL DEFAULT 'release',
+    color           VARCHAR(30) NOT NULL DEFAULT 'indigo',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_site_annotations_site ON site_annotations(site_id);
 
 -- ── Updated_at trigger function ──
 CREATE OR REPLACE FUNCTION update_updated_at()

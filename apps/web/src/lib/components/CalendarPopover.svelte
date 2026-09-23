@@ -335,10 +335,10 @@
 							class="h-8 w-8 mx-auto flex items-center justify-center text-xs rounded-md font-mono transition-all cursor-pointer select-none relative {isStart || isEnd
 								? 'bg-indigo-600 text-white font-bold shadow-md z-10'
 								: inRange
-								? 'bg-indigo-500/20 text-indigo-300 dark:text-indigo-200 rounded-none'
+								? 'bg-primary/15 text-primary font-semibold rounded-none'
 								: cell.isCurrentMonth
 								? 'text-heading hover:bg-card-hover'
-								: 'text-label/30 cursor-not-allowed opacity-30'} {cell.isToday && !isStart && !isEnd ? 'border border-indigo-500/40 text-indigo-400 font-semibold' : ''}"
+								: 'text-label/30 cursor-not-allowed opacity-30'} {cell.isToday && !isStart && !isEnd ? 'border border-primary/40 text-primary font-semibold' : ''}"
 						>
 							{cell.day}
 						</button>

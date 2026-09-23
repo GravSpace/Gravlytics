@@ -73,6 +73,11 @@ func main() {
 	mux.HandleFunc("GET /api/v1/stats/ecommerce", h.Ecommerce)
 	mux.HandleFunc("GET /api/v1/stats/flow", h.UserFlow)
 	mux.HandleFunc("GET /api/v1/stats/campaigns/overview", h.CampaignOverview)
+	mux.HandleFunc("GET /api/v1/stats/debugview", h.DebugView)
+	mux.HandleFunc("GET /api/v1/stats/properties/keys", h.PropertyKeys)
+	mux.HandleFunc("GET /api/v1/stats/properties/values", h.PropertyValues)
+	mux.HandleFunc("GET /api/v1/stats/attribution", h.Attribution)
+	mux.HandleFunc("GET /api/v1/stats/segments/compare", h.SegmentComparison)
 
 	mux.HandleFunc("GET /api/stats/overview", h.Overview)
 	mux.HandleFunc("GET /api/stats/timeseries", h.TimeSeries)
@@ -94,6 +99,11 @@ func main() {
 	mux.HandleFunc("GET /api/stats/ecommerce", h.Ecommerce)
 	mux.HandleFunc("GET /api/stats/flow", h.UserFlow)
 	mux.HandleFunc("GET /api/stats/campaigns/overview", h.CampaignOverview)
+	mux.HandleFunc("GET /api/stats/debugview", h.DebugView)
+	mux.HandleFunc("GET /api/stats/properties/keys", h.PropertyKeys)
+	mux.HandleFunc("GET /api/stats/properties/values", h.PropertyValues)
+	mux.HandleFunc("GET /api/stats/attribution", h.Attribution)
+	mux.HandleFunc("GET /api/stats/segments/compare", h.SegmentComparison)
 
 	// Health
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

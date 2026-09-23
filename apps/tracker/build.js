@@ -27,7 +27,7 @@ async function build() {
 
   // Read output and check gzip size
   const minified = readFileSync('./dist/gravlytics.min.js')
-  const gzipped = gzipSync(minified)
+  const gzipped = gzipSync(minified, { level: 9 })
 
   const rawSize = minified.length
   const gzipSize = gzipped.length

@@ -240,7 +240,7 @@
 										<span class="badge-tag rounded px-1.5 py-0.5 text-[10px] font-mono text-body">
 											{formatDuration(s.duration_sec)}
 										</span>
-										<span class="rounded bg-indigo-500/15 border border-indigo-500/25 px-1.5 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+										<span class="rounded bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-400">
 											{s.events_count} {s.events_count === 1 ? 'event' : 'events'}
 										</span>
 									</div>
@@ -297,7 +297,7 @@
 											<div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
 												<span class="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full {ev.event_name === 'pageview' ? 'bg-indigo-400' : 'bg-emerald-400'}" style="box-shadow: 0 0 0 4px var(--card-bg-solid);"></span>
 												<div class="flex items-center gap-2 flex-wrap min-w-0">
-													<span class="font-mono text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded {ev.event_name === 'pageview' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-300'}">
+													<span class="font-mono text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded {ev.event_name === 'pageview' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'}">
 														{ev.event_name}
 													</span>
 													<span class="font-mono text-body truncate">{ev.url_path}</span>

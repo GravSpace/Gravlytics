@@ -179,7 +179,7 @@
 				<span class="text-[11px] text-label">Quick Templates:</span>
 				<button
 					onclick={() => addStarterGoal('Read Articles', 'pageview', '/metropolitan/*')}
-					class="rounded border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 text-xs font-mono text-indigo-300 hover:bg-indigo-500/20 transition-colors"
+					class="rounded border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-mono text-primary font-semibold hover:bg-primary/20 transition-colors"
 				>
 					+ Article Views (/metropolitan/*)
 				</button>
@@ -191,7 +191,7 @@
 				</button>
 				<button
 					onclick={() => addStarterGoal('User Signup', 'event', 'signup')}
-					class="rounded border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-xs font-mono text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+					class="rounded border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-mono text-sky-700 dark:text-sky-300 hover:bg-sky-500/20 transition-colors"
 				>
 					+ Event: signup
 				</button>
@@ -199,7 +199,7 @@
 
 			<button
 				onclick={() => (showAddModal = true)}
-				class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+				class="btn-primary flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold shadow-sm"
 			>
 				<Plus size={14} />
 				<span>Define Custom Goal</span>
@@ -208,9 +208,9 @@
 	{:else}
 		<div class="flex flex-col gap-2">
 			{#each goals as goal}
-				<div class="flex items-center justify-between card p-3.5 px-4 transition-colors hover:border-indigo-500/30">
+				<div class="flex items-center justify-between card p-3.5 px-4 transition-colors hover:border-primary/40">
 					<div class="flex items-center gap-3">
-						<div class="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+						<div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary border border-primary/20">
 							<Target size={16} strokeWidth={2} />
 						</div>
 						<div>
@@ -218,8 +218,8 @@
 								<h3 class="text-xs font-semibold text-heading">{goal.name}</h3>
 								<span
 									class="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase font-semibold {goal.type === 'event'
-										? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30'
-										: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'}"
+										? 'bg-primary/10 text-primary border border-primary/20'
+										: 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20'}"
 								>
 									{goal.type}
 								</span>
@@ -336,7 +336,7 @@
 											newGoalTrigger = ev;
 											if (!newGoalName) newGoalName = `Event: ${ev}`;
 										}}
-										class="rounded border border-themed bg-input px-2 py-0.5 text-[10px] font-mono text-cyan-300 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-colors"
+										class="rounded border border-themed bg-input px-2 py-0.5 text-[10px] font-mono text-sky-700 dark:text-sky-300 hover:border-sky-500/50 hover:bg-sky-500/10 transition-colors"
 									>
 										{ev}
 									</button>

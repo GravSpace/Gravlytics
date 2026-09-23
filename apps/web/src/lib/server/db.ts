@@ -647,6 +647,13 @@ export const db = {
 		return this.getSiteByTrackingId(siteId);
 	},
 
+	async resolveSiteId(siteIdOrTrackingId: string): Promise<string | null> {
+		if (!siteIdOrTrackingId) return null;
+		if (isUuid(siteIdOrTrackingId)) return siteIdOrTrackingId;
+		const site = await this.getSiteByTrackingId(siteIdOrTrackingId);
+		return site ? site.id : null;
+	},
+
 	async createSite(domain: string, name: string, orgId?: string): Promise<Site> {
 		const trackingId = 'gly_' + Math.random().toString(36).substring(2, 8);
 		let targetOrgId = orgId;
@@ -1029,11 +1036,14 @@ export const db = {
 
 	// ── Saved Reports ──
 
-	async getSavedReports(userId: string, siteId?: string): Promise<any[]> {
+	async getSavedReports(userId: string, siteIdOrTrackingId?: string): Promise<any[]> {
 		if (!isUuid(userId)) return [];
 		const conditions = [eq(savedReports.userId, userId)];
-		if (siteId && isUuid(siteId)) {
-			conditions.push(eq(savedReports.siteId, siteId));
+		if (siteIdOrTrackingId) {
+			const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+			if (targetSiteId) {
+				conditions.push(eq(savedReports.siteId, targetSiteId));
+			}
 		}
 		const rows = await drizzleDb.query.savedReports.findMany({
 			where: and(...conditions),
@@ -1049,13 +1059,16 @@ export const db = {
 		}));
 	},
 
-	async createSavedReport(userId: string, siteId: string, name: string, filters: Record<string, any>): Promise<any> {
-		if (!isUuid(userId) || !isUuid(siteId)) throw new Error('Invalid user or site ID');
+	async createSavedReport(userId: string, siteIdOrTrackingId: string, name: string, filters: Record<string, any>): Promise<any> {
+		if (!isUuid(userId)) throw new Error('Invalid user ID');
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) throw new Error('Invalid user or site ID');
+
 		const [report] = await drizzleDb
 			.insert(savedReports)
 			.values({
 				userId,
-				siteId,
+				siteId: targetSiteId,
 				name: name.trim() || 'Untitled Report',
 				filters
 			})
@@ -1081,10 +1094,12 @@ export const db = {
 
 	// ── Alerts ──
 
-	async getAlerts(siteId: string): Promise<any[]> {
-		if (!isUuid(siteId)) return [];
+	async getAlerts(siteIdOrTrackingId: string): Promise<any[]> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) return [];
+
 		const rows = await drizzleDb.query.alerts.findMany({
-			where: eq(alerts.siteId, siteId),
+			where: eq(alerts.siteId, targetSiteId),
 			orderBy: [desc(alerts.createdAt)]
 		});
 		return rows.map((a) => ({
@@ -1102,12 +1117,14 @@ export const db = {
 		}));
 	},
 
-	async createAlert(siteId: string, data: { name: string; metric: string; condition: string; threshold: number; windowMinutes: number; webhookUrl: string }): Promise<any> {
-		if (!isUuid(siteId)) throw new Error('Invalid site ID');
+	async createAlert(siteIdOrTrackingId: string, data: { name: string; metric: string; condition: string; threshold: number; windowMinutes: number; webhookUrl: string }): Promise<any> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) throw new Error('Invalid site ID');
+
 		const [alert] = await drizzleDb
 			.insert(alerts)
 			.values({
-				siteId,
+				siteId: targetSiteId,
 				name: data.name.trim(),
 				metric: data.metric,
 				condition: data.condition,
@@ -1194,9 +1211,11 @@ export const db = {
 
 	// ── Site Annotations ──
 
-	async getSiteAnnotations(siteId: string, from?: string, to?: string): Promise<any[]> {
-		if (!isUuid(siteId)) return [];
-		const conditions = [eq(siteAnnotations.siteId, siteId)];
+	async getSiteAnnotations(siteIdOrTrackingId: string, from?: string, to?: string): Promise<any[]> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) return [];
+
+		const conditions = [eq(siteAnnotations.siteId, targetSiteId)];
 		if (from) conditions.push(sql`${siteAnnotations.date} >= ${from}`);
 		if (to) conditions.push(sql`${siteAnnotations.date} <= ${to}`);
 
@@ -1218,14 +1237,16 @@ export const db = {
 	},
 
 	async createSiteAnnotation(
-		siteId: string,
+		siteIdOrTrackingId: string,
 		data: { date: string; title: string; description?: string; category?: string; color?: string }
 	): Promise<any> {
-		if (!isUuid(siteId)) throw new Error('Invalid site ID');
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) throw new Error('Invalid site ID');
+
 		const [created] = await drizzleDb
 			.insert(siteAnnotations)
 			.values({
-				siteId,
+				siteId: targetSiteId,
 				date: data.date.trim(),
 				title: data.title.trim(),
 				description: data.description?.trim() || '',

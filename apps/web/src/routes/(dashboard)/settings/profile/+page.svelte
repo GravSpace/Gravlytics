@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { User, Sliders, Globe, Users, Key, Check, AlertCircle, Shield, Lock, Mail } from '@lucide/svelte';
+	import { User, Check, AlertCircle, Shield, Lock, Mail } from '@lucide/svelte';
 	import { onMount } from 'svelte';
+	import SettingsTabs from '$lib/components/SettingsTabs.svelte';
 
 	let name = $state('');
 	let email = $state('');
@@ -121,28 +122,7 @@
 	</div>
 
 	<!-- Navigation Tabs -->
-	<div class="flex items-center gap-1.5 border-b border-themed pb-2 text-xs overflow-x-auto no-scrollbar">
-		<a href="/settings/profile" class="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 font-semibold text-white shadow-sm whitespace-nowrap shrink-0">
-			<User size={13} />
-			<span>Profile</span>
-		</a>
-		<a href="/settings" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Sliders size={13} />
-			<span>General</span>
-		</a>
-		<a href="/settings/sites" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Globe size={13} />
-			<span>Sites</span>
-		</a>
-		<a href="/settings/team" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Users size={13} />
-			<span>Team</span>
-		</a>
-		<a href="/settings/api-keys" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium text-label hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap shrink-0">
-			<Key size={13} />
-			<span>API Keys</span>
-		</a>
-	</div>
+	<SettingsTabs />
 
 	<!-- Profile Summary Banner -->
 	<div class="rounded-xl border border-themed bg-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
