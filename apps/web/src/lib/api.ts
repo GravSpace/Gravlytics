@@ -15,6 +15,8 @@ export interface TimeSeriesPoint {
 	label: string;
 	pageviews: number;
 	visitors: number;
+	date?: string;
+	unique_visitors?: number;
 }
 
 export interface BreakdownItem {
@@ -664,6 +666,262 @@ export async function fetchAds(
 		overall_viewability: 0,
 		overall_ctr: 0,
 		slots: []
+	};
+}
+
+// ── Scroll Depth & Heatmap Interfaces ──
+
+export interface ScrollDepthResult {
+	path: string;
+	total_views: number;
+	scroll_25_pct: number;
+	scroll_50_pct: number;
+	scroll_75_pct: number;
+	scroll_100_pct: number;
+	scroll_25_count: number;
+	scroll_50_count: number;
+	scroll_75_count: number;
+	scroll_100_count: number;
+	avg_scroll_depth: number;
+}
+
+export async function fetchScrollDepth(
+	siteId: string,
+	path = '',
+	from?: string,
+	to?: string
+): Promise<ScrollDepthResult> {
+	const params = new URLSearchParams({ site_id: siteId });
+	if (path) params.set('path', path);
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/scroll?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch scroll depth', err);
+	}
+
+	return {
+		path,
+		total_views: 0,
+		scroll_25_pct: 0,
+		scroll_50_pct: 0,
+		scroll_75_pct: 0,
+		scroll_100_pct: 0,
+		scroll_25_count: 0,
+		scroll_50_count: 0,
+		scroll_75_count: 0,
+		scroll_100_count: 0,
+		avg_scroll_depth: 0
+	};
+}
+
+export interface HeatmapPoint {
+	x: number;
+	y: number;
+	tag: string;
+	text: string;
+	count: number;
+}
+
+export interface HeatmapResult {
+	path: string;
+	total_clicks: number;
+	points: HeatmapPoint[];
+}
+
+export async function fetchHeatmap(
+	siteId: string,
+	path = '',
+	from?: string,
+	to?: string
+): Promise<HeatmapResult> {
+	const params = new URLSearchParams({ site_id: siteId });
+	if (path) params.set('path', path);
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/heatmap?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch heatmap', err);
+	}
+
+	return { path, total_clicks: 0, points: [] };
+}
+
+// ── JavaScript Error Tracking Interfaces ──
+
+export interface ErrorItem {
+	message: string;
+	filename: string;
+	lineno: string;
+	count: number;
+	visitors: number;
+	last_seen: string;
+	stack: string;
+	path: string;
+}
+
+export interface ErrorTimeSeriesPoint {
+	date: string;
+	count: number;
+}
+
+export interface ErrorOverviewResult {
+	total_errors: number;
+	impacted_users: number;
+	error_free_rate: number;
+	top_failing_page: string;
+	errors: ErrorItem[];
+	timeseries: ErrorTimeSeriesPoint[];
+}
+
+export async function fetchErrors(
+	siteId: string,
+	from?: string,
+	to?: string,
+	limit = 50
+): Promise<ErrorOverviewResult> {
+	const params = new URLSearchParams({ site_id: siteId, limit: String(limit) });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/errors?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch errors', err);
+	}
+
+	return {
+		total_errors: 0,
+		impacted_users: 0,
+		error_free_rate: 100,
+		top_failing_page: '',
+		errors: [],
+		timeseries: []
+	};
+}
+
+// ── E-commerce & Revenue Interfaces ──
+
+export interface TransactionItem {
+	order_id: string;
+	revenue: number;
+	currency: string;
+	items_count: number;
+	timestamp: string;
+	url_path: string;
+}
+
+export interface EcommerceOverviewResult {
+	total_revenue: number;
+	total_orders: number;
+	average_order_value: number;
+	conversion_rate: number;
+	recent_orders: TransactionItem[];
+	revenue_timeseries: TimeSeriesPoint[];
+}
+
+export async function fetchEcommerce(
+	siteId: string,
+	from?: string,
+	to?: string
+): Promise<EcommerceOverviewResult> {
+	const params = new URLSearchParams({ site_id: siteId });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/ecommerce?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch ecommerce stats', err);
+	}
+
+	return {
+		total_revenue: 0,
+		total_orders: 0,
+		average_order_value: 0,
+		conversion_rate: 0,
+		recent_orders: [],
+		revenue_timeseries: []
+	};
+}
+
+// ── User Flow Transition Interfaces ──
+
+export interface UserFlowTransition {
+	from_path: string;
+	to_path: string;
+	transitions: number;
+}
+
+export interface UserFlowResult {
+	transitions: UserFlowTransition[];
+	total_paths: number;
+}
+
+export async function fetchUserFlow(
+	siteId: string,
+	from?: string,
+	to?: string
+): Promise<UserFlowResult> {
+	const params = new URLSearchParams({ site_id: siteId });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/flow?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch user flow', err);
+	}
+
+	return { transitions: [], total_paths: 0 };
+}
+
+// ── Campaign Overview Interfaces ──
+
+export interface CampaignOverviewResult {
+	total_visitors: number;
+	total_sessions: number;
+	bounce_rate: number;
+	bounceRate?: number;
+	top_campaign: string;
+	top_medium: string;
+	top_source: string;
+	campaigns: BreakdownItem[];
+}
+
+export async function fetchCampaignOverview(
+	siteId: string,
+	from?: string,
+	to?: string
+): Promise<CampaignOverviewResult> {
+	const params = new URLSearchParams({ site_id: siteId });
+	if (from) params.set('from', from);
+	if (to) params.set('to', to);
+
+	try {
+		const res = await fetch(`${API_BASE}/api/stats/campaigns/overview?${params.toString()}`);
+		if (res.ok) return await res.json();
+	} catch (err) {
+		console.error('Failed to fetch campaign overview', err);
+	}
+
+	return {
+		total_visitors: 0,
+		total_sessions: 0,
+		bounce_rate: 0,
+		top_campaign: 'None',
+		top_medium: 'None',
+		top_source: 'Direct',
+		campaigns: []
 	};
 }
 

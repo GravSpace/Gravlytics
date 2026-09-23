@@ -2,6 +2,7 @@
 // Reactive store providing global date filtering across all dashboard views
 
 export type DatePreset = 'today' | 'yesterday' | '7d' | '30d' | '90d' | '12m' | 'custom';
+export type CompareMode = 'none' | 'previous_period' | 'previous_year';
 
 function formatDate(d: Date): string {
 	const year = d.getFullYear();
@@ -22,6 +23,7 @@ class DateStore {
 	from = $state<string>('');
 	to = $state<string>('');
 	label = $state<string>('Last 30 days');
+	compareMode = $state<CompareMode>('none');
 	version = $state<number>(0);
 
 	constructor() {
@@ -30,6 +32,45 @@ class DateStore {
 
 	get selectedRange() {
 		return { from: this.from, to: this.to };
+	}
+
+	get compareFrom(): string {
+		if (this.compareMode === 'none' || !this.from || !this.to) return '';
+		if (this.compareMode === 'previous_year') {
+			const [y, m, d] = this.from.split('-').map(Number);
+			return `${y - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+		}
+		const fromDate = new Date(this.from);
+		const toDate = new Date(this.to);
+		const diffDays = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 3600 * 24)));
+		const prevTo = new Date(fromDate);
+		prevTo.setDate(prevTo.getDate() - 1);
+		const prevFrom = new Date(prevTo);
+		prevFrom.setDate(prevFrom.getDate() - diffDays + 1);
+		return formatDate(prevFrom);
+	}
+
+	get compareTo(): string {
+		if (this.compareMode === 'none' || !this.from || !this.to) return '';
+		if (this.compareMode === 'previous_year') {
+			const [y, m, d] = this.to.split('-').map(Number);
+			return `${y - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+		}
+		const fromDate = new Date(this.from);
+		const prevTo = new Date(fromDate);
+		prevTo.setDate(prevTo.getDate() - 1);
+		return formatDate(prevTo);
+	}
+
+	get compareLabel(): string {
+		if (this.compareMode === 'none') return '';
+		if (this.compareMode === 'previous_year') return 'vs. Same Period Last Year';
+		return 'vs. Previous Period';
+	}
+
+	setCompareMode(mode: CompareMode) {
+		this.compareMode = mode;
+		this.version++;
 	}
 
 	setPreset(preset: DatePreset) {

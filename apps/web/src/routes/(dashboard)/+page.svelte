@@ -18,11 +18,25 @@
 		Activity,
 		Pin,
 		X,
-		Plus
+		Plus,
+		Sliders,
+		Megaphone,
+		ArrowUp,
+		ArrowDown,
+		Check,
+		RotateCcw
 	} from '@lucide/svelte';
-	import { fetchOverview, fetchTimeSeries, fetchBreakdown, type BreakdownItem, type TimeSeriesPoint } from '$lib/api';
+	import {
+		fetchOverview,
+		fetchTimeSeries,
+		fetchBreakdown,
+		type BreakdownItem,
+		type TimeSeriesPoint,
+		type OverviewStats
+	} from '$lib/api';
 	import { siteStore } from '$lib/stores/site.svelte';
 	import { dateStore } from '$lib/stores/date.svelte';
+	import { widgetStore } from '$lib/stores/widgets.svelte';
 
 	let uniqueVisitors = $state(0);
 	let totalPageviews = $state(0);
@@ -31,9 +45,14 @@
 	let hasData = $state(false);
 	let isLoading = $state(true);
 
+	// Period over period comparison
+	let compareOverview = $state<OverviewStats | null>(null);
+	let compareChartData = $state<TimeSeriesPoint[]>([]);
+
 	let chartData = $state<TimeSeriesPoint[]>([]);
 	let annotations = $state<{ id: string; date: string; title: string; description?: string; category: string; color: string }[]>([]);
 	let showAnnotationModal = $state(false);
+	let showWidgetModal = $state(false);
 	let newNoteDate = $state(new Date().toISOString().split('T')[0]);
 	let newNoteTitle = $state('');
 	let newNoteDesc = $state('');
@@ -46,12 +65,44 @@
 	let topLocations = $state<BreakdownItem[]>([]);
 	let geoDimension = $state<'country' | 'region' | 'city'>('country');
 	let topDevices = $state<BreakdownItem[]>([]);
+	let topCampaigns = $state<BreakdownItem[]>([]);
+
+	function calcDelta(current: number, previous?: number): number | undefined {
+		if (previous === undefined || previous === 0) return undefined;
+		return Math.round(((current - previous) / previous) * 1000) / 10;
+	}
 
 	const kpis = $derived([
-		{ label: 'Unique Visitors', value: uniqueVisitors, icon: Users, subtitle: 'Total daily unique' },
-		{ label: 'Total Pageviews', value: totalPageviews, icon: Eye, subtitle: 'Raw page views' },
-		{ label: 'Bounce Rate', value: bounceRate, format: 'percent' as const, icon: Percent, subtitle: 'Single page sessions' },
-		{ label: 'Avg. Duration', value: avgDuration, format: 'duration' as const, icon: Clock, subtitle: 'Time per session' }
+		{
+			label: 'Unique Visitors',
+			value: uniqueVisitors,
+			icon: Users,
+			change: compareOverview ? calcDelta(uniqueVisitors, compareOverview.visitors) : undefined,
+			subtitle: dateStore.compareMode !== 'none' ? dateStore.compareLabel : 'Total daily unique'
+		},
+		{
+			label: 'Total Pageviews',
+			value: totalPageviews,
+			icon: Eye,
+			change: compareOverview ? calcDelta(totalPageviews, compareOverview.pageviews) : undefined,
+			subtitle: dateStore.compareMode !== 'none' ? dateStore.compareLabel : 'Raw page views'
+		},
+		{
+			label: 'Bounce Rate',
+			value: bounceRate,
+			format: 'percent' as const,
+			icon: Percent,
+			change: compareOverview ? Math.round((bounceRate - compareOverview.bounceRate) * 10) / 10 : undefined,
+			subtitle: dateStore.compareMode !== 'none' ? dateStore.compareLabel : 'Single page sessions'
+		},
+		{
+			label: 'Avg. Duration',
+			value: avgDuration,
+			format: 'duration' as const,
+			icon: Clock,
+			change: compareOverview ? calcDelta(avgDuration, compareOverview.avgDurationSec) : undefined,
+			subtitle: dateStore.compareMode !== 'none' ? dateStore.compareLabel : 'Time per session'
+		}
 	]);
 
 	async function loadRealData() {
@@ -61,24 +112,45 @@
 			const from = dateStore.from;
 			const to = dateStore.to;
 
-			const [overview, ts, pages, sources, locations, devices] = await Promise.all([
+			const promises: Promise<any>[] = [
 				fetchOverview(currentSite, from, to),
 				fetchTimeSeries(currentSite, from, to),
 				fetchBreakdown(currentSite, 'url_path', from, to, 10),
 				fetchBreakdown(currentSite, 'referrer_domain', from, to, 10),
 				fetchBreakdown(currentSite, geoDimension, from, to, 10),
-				fetchBreakdown(currentSite, 'device_type', from, to, 10)
-			]);
+				fetchBreakdown(currentSite, 'device_type', from, to, 10),
+				fetchBreakdown(currentSite, 'utm_campaign', from, to, 10)
+			];
+
+			// Parallel comparison period query if active
+			if (dateStore.compareMode !== 'none' && dateStore.compareFrom && dateStore.compareTo) {
+				promises.push(fetchOverview(currentSite, dateStore.compareFrom, dateStore.compareTo));
+				promises.push(fetchTimeSeries(currentSite, dateStore.compareFrom, dateStore.compareTo));
+			}
+
+			const results = await Promise.all(promises);
+
+			const overview = results[0];
+			const ts = results[1];
+			topPages = results[2];
+			topSources = results[3];
+			topLocations = results[4];
+			topDevices = results[5];
+			topCampaigns = results[6];
 
 			uniqueVisitors = overview.visitors;
 			totalPageviews = overview.pageviews;
 			bounceRate = overview.bounceRate;
 			avgDuration = overview.avgDurationSec;
 			chartData = ts;
-			topPages = pages;
-			topSources = sources;
-			topLocations = locations;
-			topDevices = devices;
+
+			if (results.length > 7) {
+				compareOverview = results[7];
+				compareChartData = results[8] || [];
+			} else {
+				compareOverview = null;
+				compareChartData = [];
+			}
 
 			hasData = overview.pageviews > 0;
 			await loadAnnotations();
@@ -132,6 +204,19 @@
 		}
 	}
 
+	async function handleDeleteAnnotation(id: string) {
+		try {
+			const res = await fetch(`/api/annotations?id=${encodeURIComponent(id)}`, {
+				method: 'DELETE'
+			});
+			if (res.ok) {
+				await loadAnnotations();
+			}
+		} catch (err) {
+			console.error('Failed to delete annotation', err);
+		}
+	}
+
 	async function switchGeoDimension(dim: 'country' | 'region' | 'city') {
 		geoDimension = dim;
 		const currentSite = siteStore.activeSiteId;
@@ -149,6 +234,7 @@
 		if (current && (current !== lastSiteId || ver !== lastDateVersion)) {
 			lastSiteId = current;
 			lastDateVersion = ver;
+			widgetStore.init(current);
 			untrack(() => {
 				loadRealData();
 			});
@@ -156,6 +242,7 @@
 	});
 
 	onMount(() => {
+		widgetStore.init(siteStore.activeSiteId);
 		loadRealData();
 		const interval = setInterval(() => {
 			loadRealData();
@@ -169,6 +256,28 @@
 </svelte:head>
 
 <div class="flex flex-col gap-4">
+	<!-- Top Bar Action: Customize Widgets -->
+	<div class="flex items-center justify-between">
+		<div class="flex items-center gap-2">
+			<h2 class="text-base font-bold tracking-tight text-heading">Analytics Overview</h2>
+			{#if dateStore.compareMode !== 'none'}
+				<span class="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono text-indigo-400 border border-indigo-500/20">
+					<span>Comparing:</span>
+					<span class="font-bold">{dateStore.compareLabel}</span>
+				</span>
+			{/if}
+		</div>
+
+		<button
+			type="button"
+			onclick={() => (showWidgetModal = true)}
+			class="btn-ghost flex items-center gap-1.5 rounded-lg border border-themed px-2.5 py-1 text-xs text-label hover:text-heading hover:bg-card-hover transition-colors shadow-sm cursor-pointer"
+		>
+			<Sliders size={13} class="text-indigo-400" />
+			<span>Customize Widgets</span>
+		</button>
+	</div>
+
 	<!-- Zero-state when user has no websites added -->
 	{#if siteStore.sites.length === 0 && !isLoading}
 		<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-xs shadow-sm">
@@ -206,23 +315,78 @@
 		</div>
 	{/if}
 
-	<!-- KPI Metric Cards -->
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-		{#each kpis as kpi}
-			<KPICard {...kpi} />
-		{/each}
-	</div>
+	<!-- Customizable Widgets Rendered in Order -->
+	{#each widgetStore.widgets as widget, index}
+		{#if widget.enabled}
+			{#if widget.id === 'kpi_cards'}
+				<!-- KPI Metric Cards -->
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					{#each kpis as kpi}
+						<KPICard {...kpi} />
+					{/each}
+				</div>
+			{:else if widget.id === 'traffic_chart'}
+				<!-- Time Series Chart -->
+				<TimeSeriesChart
+					data={chartData}
+					compareData={compareChartData}
+					annotations={annotations}
+					onAddAnnotation={() => (showAnnotationModal = true)}
+					onDeleteAnnotation={handleDeleteAnnotation}
+				/>
+			{:else if widget.id === 'top_pages'}
+				<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+					<BreakdownTable title="Top Visited Pages" items={topPages} icon={FileText} metricLabel="Pageviews" />
+					<BreakdownTable title="Referral Sources" items={topSources} icon={Compass} metricLabel="Visitors" />
+				</div>
+			{:else if widget.id === 'geo_distribution'}
+				<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+					<!-- Geographic Distribution with Country / Region / City switcher -->
+					<div class="flex flex-col gap-2">
+						<div class="flex items-center justify-between px-1">
+							<span class="text-xs font-medium text-label">Geographic View:</span>
+							<div class="flex items-center gap-1 rounded bg-input p-0.5 border border-themed text-[11px]">
+								<button
+									onclick={() => switchGeoDimension('country')}
+									class="rounded px-2 py-0.5 font-medium transition-colors {geoDimension === 'country' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}"
+								>
+									Countries
+								</button>
+								<button
+									onclick={() => switchGeoDimension('region')}
+									class="rounded px-2 py-0.5 font-medium transition-colors {geoDimension === 'region' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}"
+								>
+									Regions
+								</button>
+								<button
+									onclick={() => switchGeoDimension('city')}
+									class="rounded px-2 py-0.5 font-medium transition-colors {geoDimension === 'city' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}"
+								>
+									Cities
+								</button>
+							</div>
+						</div>
+						<BreakdownTable
+							title={geoDimension === 'country' ? 'Top Countries' : geoDimension === 'region' ? 'Top Regions & Provinces' : 'Top Cities & Metros'}
+							items={topLocations}
+							icon={geoDimension === 'country' ? Globe : geoDimension === 'region' ? MapPin : Building2}
+							metricLabel="Visitors"
+						/>
+					</div>
 
-	<!-- Time Series Chart -->
-	<TimeSeriesChart
-		data={chartData}
-		annotations={annotations}
-		onAddAnnotation={() => (showAnnotationModal = true)}
-	/>
+					<BreakdownTable title="Device Categories" items={topDevices} icon={MonitorSmartphone} metricLabel="Visitors" />
+				</div>
+			{:else if widget.id === 'campaign_summary' && topCampaigns.length > 0}
+				<div class="grid grid-cols-1 gap-3">
+					<BreakdownTable title="Active UTM Campaigns" items={topCampaigns} icon={Megaphone} metricLabel="Visitors" />
+				</div>
+			{/if}
+		{/if}
+	{/each}
 
 	<!-- Annotation Creation Modal -->
 	{#if showAnnotationModal}
-		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
 			<div class="relative w-full max-w-md rounded-xl border border-themed bg-card p-6 shadow-2xl">
 				<div class="flex items-center justify-between pb-4 border-b border-themed">
 					<div class="flex items-center gap-2">
@@ -332,44 +496,88 @@
 		</div>
 	{/if}
 
-	<!-- Breakdown Tables -->
-	<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-		<BreakdownTable title="Top Pages" items={topPages} icon={FileText} metricLabel="Pageviews" />
-		<BreakdownTable title="Top Referrers" items={topSources} icon={Compass} metricLabel="Visitors" />
-		
-		<!-- Geographic Distribution with Country / Region / City switcher -->
-		<div class="flex flex-col gap-2">
-			<div class="flex items-center justify-between px-1">
-				<span class="text-xs font-medium text-label">Geographic View:</span>
-				<div class="flex items-center gap-1 rounded bg-input p-0.5 border border-themed text-[11px]">
+	<!-- Custom Dashboard Widgets Drawer / Modal -->
+	{#if showWidgetModal}
+		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+			<div class="relative w-full max-w-lg rounded-2xl border border-themed bg-card p-6 shadow-2xl">
+				<div class="flex items-center justify-between pb-4 border-b border-themed">
+					<div class="flex items-center gap-2">
+						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+							<Sliders size={16} />
+						</div>
+						<div>
+							<h3 class="font-semibold text-heading text-sm">Customize Dashboard Layout</h3>
+							<p class="text-[11px] text-hint">Toggle visibility and reorder dashboard widgets</p>
+						</div>
+					</div>
 					<button
-						onclick={() => switchGeoDimension('country')}
-						class="rounded px-2 py-0.5 font-medium transition-colors {geoDimension === 'country' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}"
+						type="button"
+						onclick={() => (showWidgetModal = false)}
+						class="text-hint hover:text-heading transition-colors"
 					>
-						Countries
+						<X size={16} />
 					</button>
+				</div>
+
+				<div class="mt-4 flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
+					{#each widgetStore.widgets as w, idx}
+						<div class="flex items-center justify-between rounded-xl border border-themed bg-input/40 p-3 transition-colors hover:border-indigo-500/30">
+							<div class="flex items-center gap-3">
+								<input
+									type="checkbox"
+									checked={w.enabled}
+									onchange={() => widgetStore.toggleWidget(w.id, siteStore.activeSiteId)}
+									class="rounded border-themed text-indigo-600 focus:ring-indigo-500 cursor-pointer h-4 w-4"
+								/>
+								<div>
+									<span class="font-semibold text-xs text-heading">{w.title}</span>
+									<p class="text-[10px] text-hint">{w.description}</p>
+								</div>
+							</div>
+
+							<div class="flex items-center gap-1">
+								<button
+									type="button"
+									disabled={idx === 0}
+									onclick={() => widgetStore.moveWidget(idx, 'up', siteStore.activeSiteId)}
+									class="p-1 text-hint hover:text-heading disabled:opacity-30 rounded hover:bg-card-hover transition-colors"
+									title="Move up"
+								>
+									<ArrowUp size={13} />
+								</button>
+								<button
+									type="button"
+									disabled={idx === widgetStore.widgets.length - 1}
+									onclick={() => widgetStore.moveWidget(idx, 'down', siteStore.activeSiteId)}
+									class="p-1 text-hint hover:text-heading disabled:opacity-30 rounded hover:bg-card-hover transition-colors"
+									title="Move down"
+								>
+									<ArrowDown size={13} />
+								</button>
+							</div>
+						</div>
+					{/each}
+				</div>
+
+				<div class="mt-5 flex items-center justify-between pt-4 border-t border-themed">
 					<button
-						onclick={() => switchGeoDimension('region')}
-						class="rounded px-2 py-0.5 font-medium transition-colors {geoDimension === 'region' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}"
+						type="button"
+						onclick={() => widgetStore.resetDefaults(siteStore.activeSiteId)}
+						class="flex items-center gap-1.5 text-xs text-hint hover:text-heading transition-colors"
 					>
-						Regions
+						<RotateCcw size={13} />
+						<span>Reset to Default</span>
 					</button>
+
 					<button
-						onclick={() => switchGeoDimension('city')}
-						class="rounded px-2 py-0.5 font-medium transition-colors {geoDimension === 'city' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}"
+						type="button"
+						onclick={() => (showWidgetModal = false)}
+						class="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition-colors"
 					>
-						Cities
+						Done
 					</button>
 				</div>
 			</div>
-			<BreakdownTable
-				title={geoDimension === 'country' ? 'Top Countries' : geoDimension === 'region' ? 'Top Regions & Provinces' : 'Top Cities & Metros'}
-				items={topLocations}
-				icon={geoDimension === 'country' ? Globe : geoDimension === 'region' ? MapPin : Building2}
-				metricLabel="Visitors"
-			/>
 		</div>
-
-		<BreakdownTable title="Device Categories" items={topDevices} icon={MonitorSmartphone} metricLabel="Visitors" />
-	</div>
+	{/if}
 </div>

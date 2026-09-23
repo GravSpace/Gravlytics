@@ -22,7 +22,10 @@
 		Megaphone,
 		FileBarChart,
 		Route,
-		Network
+		Network,
+		Flame,
+		Bug,
+		ShoppingBag
 	} from '@lucide/svelte';
 
 	let { collapsed = $bindable(false) }: { collapsed: boolean } = $props();
@@ -35,8 +38,11 @@
 		{ label: 'Pages & Paths', href: '/pages', icon: FileText },
 		{ label: 'Events', href: '/events', icon: Zap },
 		{ label: 'User Journeys', href: '/journeys', icon: Route },
+		{ label: 'Heatmaps & Scroll', href: '/heatmaps', icon: Flame },
 		{ label: 'Campaigns & UTM', href: '/campaigns', icon: Megaphone },
+		{ label: 'E-commerce & Revenue', href: '/ecommerce', icon: ShoppingBag },
 		{ label: 'Web Vitals', href: '/vitals', icon: Gauge },
+		{ label: 'Error Tracking', href: '/errors', icon: Bug },
 		{ label: 'Acquisition', href: '/sources', icon: Compass },
 		{ label: 'Locations', href: '/locations', icon: Globe },
 		{ label: 'Devices', href: '/devices', icon: MonitorSmartphone },

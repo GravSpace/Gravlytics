@@ -390,6 +390,171 @@ func (h *Handler) Ads(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
 }
 
+// Scroll returns scroll depth milestone distribution for a path
+func (h *Handler) Scroll(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	cacheKey := fmt.Sprintf("scroll:%d:%s:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"), path)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryScrollDepth(r.Context(), siteID, path, from, to)
+	if err != nil {
+		h.logger.Error("query scroll failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
+}
+
+// Heatmap returns aggregated click coordinates for a path
+func (h *Handler) Heatmap(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	cacheKey := fmt.Sprintf("heatmap:%d:%s:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"), path)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryHeatmap(r.Context(), siteID, path, from, to)
+	if err != nil {
+		h.logger.Error("query heatmap failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
+}
+
+// Errors returns aggregated JavaScript error events, timeline, and impact
+func (h *Handler) Errors(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+
+	cacheKey := fmt.Sprintf("errors:%d:%s:%s:%d", siteID, from.Format("20060102"), to.Format("20060102"), limit)
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryErrors(r.Context(), siteID, from, to, limit)
+	if err != nil {
+		h.logger.Error("query errors failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 15*time.Second)
+}
+
+// Ecommerce returns total revenue, orders, AOV, and recent transactions
+func (h *Handler) Ecommerce(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("ecom:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryEcommerce(r.Context(), siteID, from, to)
+	if err != nil {
+		h.logger.Error("query ecommerce failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
+}
+
+// UserFlow returns multi-step session transition matrix
+func (h *Handler) UserFlow(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("flow:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryUserFlow(r.Context(), siteID, from, to)
+	if err != nil {
+		h.logger.Error("query flow failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
+}
+
+// CampaignOverview returns aggregate UTM campaign metrics and top campaigns
+func (h *Handler) CampaignOverview(w http.ResponseWriter, r *http.Request) {
+	siteID, from, to, err := h.parseParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("campaign_overview:%d:%s:%s", siteID, from.Format("20060102"), to.Format("20060102"))
+	if cached, err := h.cache.Get(r.Context(), cacheKey); err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Cache", "HIT")
+		w.Write([]byte(cached))
+		return
+	}
+
+	result, err := h.ch.QueryCampaignOverview(r.Context(), siteID, from, to)
+	if err != nil {
+		h.logger.Error("query campaign overview failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.respondJSON(w, r.Context(), cacheKey, result, 30*time.Second)
+}
+
 // parseParams extracts common query parameters
 func (h *Handler) parseParams(r *http.Request) (uint64, time.Time, time.Time, error) {
 	siteIDStr := r.URL.Query().Get("site_id")

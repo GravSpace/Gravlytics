@@ -19,11 +19,13 @@
 	import { themeStore } from '$lib/stores/theme.svelte';
 	import SiteSwitcher from '$lib/components/SiteSwitcher.svelte';
 	import CalendarPopover from '$lib/components/CalendarPopover.svelte';
+	import ExportModal from '$lib/components/ExportModal.svelte';
 	import { FORMATTED_VERSION } from '$lib/version';
 
 	let { sidebarCollapsed = false }: { sidebarCollapsed: boolean } = $props();
 
 	let isUserMenuOpen = $state(false);
+	let showExportModal = $state(false);
 
 	let user = $derived($page.data?.user || { name: 'User', email: '', role: 'viewer' });
 	let userInitials = $derived(
@@ -42,23 +44,7 @@
 	});
 
 	function handleExport() {
-		const data = [
-			['Metric', 'Value'],
-			['Site ID', siteStore.activeSiteId],
-			['Export Date', new Date().toISOString()],
-			['Date Range', dateStore.label],
-			['From', dateStore.from],
-			['To', dateStore.to]
-		]
-			.map((e) => e.join(','))
-			.join('\n');
-		const blob = new Blob([data], { type: 'text/csv' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `gravlytics_export_${dateStore.from}_${dateStore.to}.csv`;
-		a.click();
-		URL.revokeObjectURL(url);
+		showExportModal = true;
 	}
 </script>
 
@@ -210,3 +196,5 @@
 		</div>
 	</div>
 </header>
+
+<ExportModal bind:open={showExportModal} />

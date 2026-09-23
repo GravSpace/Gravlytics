@@ -3,6 +3,7 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -158,7 +159,7 @@ func (c *Client) QueryBreakdown(ctx context.Context, siteID uint64, from, to tim
 		limit = 20
 	}
 
-	if strings.HasPrefix(dimension, "prop:") || strings.HasPrefix(dimension, "props.") {
+	if strings.HasPrefix(dimension, "prop:") || strings.HasPrefix(dimension, "props.") || dimension == "utm_term" || dimension == "utm_content" {
 		propKey := strings.TrimPrefix(strings.TrimPrefix(dimension, "prop:"), "props.")
 		querySQL := `
 			SELECT
@@ -1559,6 +1560,528 @@ func (c *Client) QueryAds(ctx context.Context, siteID uint64, from, to time.Time
 	}
 
 	return result, nil
+}
+
+// ── Scroll Depth Tracking ──
+
+type ScrollDepthResult struct {
+	Path           string  `json:"path"`
+	TotalViews     uint64  `json:"total_views"`
+	Scroll25Pct    float64 `json:"scroll_25_pct"`
+	Scroll50Pct    float64 `json:"scroll_50_pct"`
+	Scroll75Pct    float64 `json:"scroll_75_pct"`
+	Scroll100Pct   float64 `json:"scroll_100_pct"`
+	Scroll25Count  uint64  `json:"scroll_25_count"`
+	Scroll50Count  uint64  `json:"scroll_50_count"`
+	Scroll75Count  uint64  `json:"scroll_75_count"`
+	Scroll100Count uint64  `json:"scroll_100_count"`
+	AvgScrollDepth float64 `json:"avg_scroll_depth"`
+}
+
+func (c *Client) QueryScrollDepth(ctx context.Context, siteID uint64, path string, from, to time.Time) (*ScrollDepthResult, error) {
+	result := &ScrollDepthResult{Path: path}
+
+	// 1. Query total pageviews for this path
+	totalViewsQuery := `
+		SELECT count() FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = 'pageview'
+		  AND (url_path = $4 OR $4 = '')
+	`
+	row := c.conn.QueryRow(ctx, totalViewsQuery, siteID, from, to, path)
+	_ = row.Scan(&result.TotalViews)
+
+	// 2. Query scroll depth events
+	scrollQuery := `
+		SELECT
+			props['depth'] AS depth,
+			count() AS count
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = '$scroll'
+		  AND (url_path = $4 OR $4 = '')
+		GROUP BY depth
+	`
+	rows, err := c.conn.Query(ctx, scrollQuery, siteID, from, to, path)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var depth string
+			var count uint64
+			if err := rows.Scan(&depth, &count); err == nil {
+				switch depth {
+				case "25":
+					result.Scroll25Count = count
+				case "50":
+					result.Scroll50Count = count
+				case "75":
+					result.Scroll75Count = count
+				case "100":
+					result.Scroll100Count = count
+				}
+			}
+		}
+	}
+
+	base := float64(result.TotalViews)
+	if base == 0 {
+		base = float64(result.Scroll25Count)
+		if base == 0 {
+			base = 1
+		}
+	}
+
+	result.Scroll25Pct = math.Min(100, float64(result.Scroll25Count)/base*100)
+	result.Scroll50Pct = math.Min(100, float64(result.Scroll50Count)/base*100)
+	result.Scroll75Pct = math.Min(100, float64(result.Scroll75Count)/base*100)
+	result.Scroll100Pct = math.Min(100, float64(result.Scroll100Count)/base*100)
+
+	totalPct := (result.Scroll25Pct*25 + result.Scroll50Pct*50 + result.Scroll75Pct*75 + result.Scroll100Pct*100)
+	divider := (result.Scroll25Pct + result.Scroll50Pct + result.Scroll75Pct + result.Scroll100Pct)
+	if divider > 0 {
+		result.AvgScrollDepth = math.Round((totalPct/divider)*10) / 10
+	} else {
+		result.AvgScrollDepth = 0
+	}
+
+	return result, nil
+}
+
+// ── Click Heatmap ──
+
+type HeatmapPoint struct {
+	X     int    `json:"x"`
+	Y     int    `json:"y"`
+	Tag   string `json:"tag"`
+	Text  string `json:"text"`
+	Count uint64 `json:"count"`
+}
+
+type HeatmapResult struct {
+	Path        string         `json:"path"`
+	TotalClicks uint64         `json:"total_clicks"`
+	Points      []HeatmapPoint `json:"points"`
+}
+
+func (c *Client) QueryHeatmap(ctx context.Context, siteID uint64, path string, from, to time.Time) (*HeatmapResult, error) {
+	result := &HeatmapResult{Path: path, Points: []HeatmapPoint{}}
+
+	querySQL := `
+		SELECT
+			toInt32OrZero(props['x']) AS x,
+			toInt32OrZero(props['y']) AS y,
+			props['tag'] AS tag,
+			props['text'] AS text,
+			count() AS count
+		FROM events
+		WHERE site_id = $1
+		  AND timestamp >= $2
+		  AND timestamp < $3
+		  AND event_name = '$click'
+		  AND (url_path = $4 OR $4 = '')
+		GROUP BY x, y, tag, text
+		ORDER BY count DESC
+		LIMIT 100
+	`
+	rows, err := c.conn.Query(ctx, querySQL, siteID, from, to, path)
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var pt HeatmapPoint
+		if err := rows.Scan(&pt.X, &pt.Y, &pt.Tag, &pt.Text, &pt.Count); err == nil {
+			result.TotalClicks += pt.Count
+			result.Points = append(result.Points, pt)
+		}
+	}
+
+	return result, nil
+}
+
+// ── Error Tracking ──
+
+type ErrorItem struct {
+	Message  string `json:"message"`
+	Filename string `json:"filename"`
+	Lineno   string `json:"lineno"`
+	Count    uint64 `json:"count"`
+	Visitors uint64 `json:"visitors"`
+	LastSeen string `json:"last_seen"`
+	Stack    string `json:"stack"`
+	Path     string `json:"path"`
+}
+
+type ErrorTimeSeriesPoint struct {
+	Date  string `json:"date"`
+	Count uint64 `json:"count"`
+}
+
+type ErrorOverviewResult struct {
+	TotalErrors    uint64                 `json:"total_errors"`
+	ImpactedUsers  uint64                 `json:"impacted_users"`
+	ErrorFreeRate  float64                `json:"error_free_rate"`
+	TopFailingPage string                 `json:"top_failing_page"`
+	Errors         []ErrorItem            `json:"errors"`
+	TimeSeries     []ErrorTimeSeriesPoint `json:"timeseries"`
+}
+
+func (c *Client) QueryErrors(ctx context.Context, siteID uint64, from, to time.Time, limit int) (*ErrorOverviewResult, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	res := &ErrorOverviewResult{
+		Errors:     []ErrorItem{},
+		TimeSeries: []ErrorTimeSeriesPoint{},
+	}
+
+	// 1. Summary
+	summaryQuery := `
+		SELECT
+			count() AS total_errors,
+			uniq(visitor_id) AS impacted_users
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = '$error'
+	`
+	_ = c.conn.QueryRow(ctx, summaryQuery, siteID, from, to).Scan(&res.TotalErrors, &res.ImpactedUsers)
+
+	// Total sessions to calculate error-free session rate
+	var totalSessions uint64
+	_ = c.conn.QueryRow(ctx, `
+		SELECT uniq(session_id) FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND event_name = 'pageview'
+	`, siteID, from, to).Scan(&totalSessions)
+
+	if totalSessions > 0 {
+		var errorSessions uint64
+		_ = c.conn.QueryRow(ctx, `
+			SELECT uniq(session_id) FROM events
+			WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND event_name = '$error'
+		`, siteID, from, to).Scan(&errorSessions)
+		res.ErrorFreeRate = math.Max(0, math.Min(100, (1.0-float64(errorSessions)/float64(totalSessions))*100))
+	} else {
+		res.ErrorFreeRate = 100
+	}
+
+	// Top failing page
+	_ = c.conn.QueryRow(ctx, `
+		SELECT url_path FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND event_name = '$error' AND url_path != ''
+		GROUP BY url_path ORDER BY count() DESC LIMIT 1
+	`, siteID, from, to).Scan(&res.TopFailingPage)
+
+	// 2. Error list
+	listQuery := `
+		SELECT
+			props['message'] AS msg,
+			props['filename'] AS file,
+			props['lineno'] AS line,
+			any(props['stack']) AS stack,
+			any(url_path) AS path,
+			count() AS cnt,
+			uniq(visitor_id) AS visitors,
+			formatDateTime(max(timestamp), '%Y-%m-%d %H:%i:%s') AS last_seen
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = '$error'
+		GROUP BY msg, file, line
+		ORDER BY cnt DESC
+		LIMIT $4
+	`
+	rows, err := c.conn.Query(ctx, listQuery, siteID, from, to, limit)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it ErrorItem
+			if err := rows.Scan(&it.Message, &it.Filename, &it.Lineno, &it.Stack, &it.Path, &it.Count, &it.Visitors, &it.LastSeen); err == nil {
+				res.Errors = append(res.Errors, it)
+			}
+		}
+	}
+
+	// 3. Error Timeseries
+	tsRows, err := c.conn.Query(ctx, `
+		SELECT
+			formatDateTime(toDate(timestamp), '%Y-%m-%d') AS d,
+			count() AS cnt
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND event_name = '$error'
+		GROUP BY d
+		ORDER BY d ASC
+	`, siteID, from, to)
+	if err == nil {
+		defer tsRows.Close()
+		for tsRows.Next() {
+			var p ErrorTimeSeriesPoint
+			if err := tsRows.Scan(&p.Date, &p.Count); err == nil {
+				res.TimeSeries = append(res.TimeSeries, p)
+			}
+		}
+	}
+
+	return res, nil
+}
+
+// ── Revenue & E-commerce Tracking ──
+
+type TransactionItem struct {
+	OrderID    string  `json:"order_id"`
+	Revenue    float64 `json:"revenue"`
+	Currency   string  `json:"currency"`
+	ItemsCount uint32  `json:"items_count"`
+	Timestamp  string  `json:"timestamp"`
+	URLPath    string  `json:"url_path"`
+}
+
+type EcommerceOverviewResult struct {
+	TotalRevenue      float64           `json:"total_revenue"`
+	TotalOrders       uint64            `json:"total_orders"`
+	AverageOrderVal   float64           `json:"average_order_value"`
+	ConversionRate    float64           `json:"conversion_rate"`
+	RecentOrders      []TransactionItem `json:"recent_orders"`
+	RevenueTimeseries []TimeSeriesPoint `json:"revenue_timeseries"`
+}
+
+func (c *Client) QueryEcommerce(ctx context.Context, siteID uint64, from, to time.Time) (*EcommerceOverviewResult, error) {
+	res := &EcommerceOverviewResult{
+		RecentOrders:      []TransactionItem{},
+		RevenueTimeseries: []TimeSeriesPoint{},
+	}
+
+	// 1. Total revenue & orders
+	summaryQuery := `
+		SELECT
+			sum(toFloat64OrDefault(props['revenue'], 0)) AS total_rev,
+			count() AS total_orders
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND (event_name = 'purchase' OR event_name = '$purchase' OR mapContains(props, 'revenue'))
+	`
+	_ = c.conn.QueryRow(ctx, summaryQuery, siteID, from, to).Scan(&res.TotalRevenue, &res.TotalOrders)
+
+	if res.TotalOrders > 0 {
+		res.AverageOrderVal = res.TotalRevenue / float64(res.TotalOrders)
+	}
+
+	// 2. Conversion rate (orders / sessions)
+	var totalSessions uint64
+	_ = c.conn.QueryRow(ctx, `
+		SELECT uniq(session_id) FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND event_name = 'pageview'
+	`, siteID, from, to).Scan(&totalSessions)
+
+	if totalSessions > 0 {
+		res.ConversionRate = float64(res.TotalOrders) / float64(totalSessions) * 100
+	}
+
+	// 3. Recent orders
+	ordersQuery := `
+		SELECT
+			props['order_id'] AS oid,
+			toFloat64OrDefault(props['revenue'], 0) AS rev,
+			props['currency'] AS curr,
+			toUInt32OrDefault(props['items_count'], 1) AS items,
+			formatDateTime(timestamp, '%Y-%m-%d %H:%i:%s') AS ts,
+			url_path
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND (event_name = 'purchase' OR event_name = '$purchase' OR mapContains(props, 'revenue'))
+		ORDER BY timestamp DESC
+		LIMIT 20
+	`
+	rows, err := c.conn.Query(ctx, ordersQuery, siteID, from, to)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it TransactionItem
+			if err := rows.Scan(&it.OrderID, &it.Revenue, &it.Currency, &it.ItemsCount, &it.Timestamp, &it.URLPath); err == nil {
+				if it.OrderID == "" {
+					it.OrderID = "ord_" + it.Timestamp
+				}
+				if it.Currency == "" {
+					it.Currency = "USD"
+				}
+				res.RecentOrders = append(res.RecentOrders, it)
+			}
+		}
+	}
+
+	// 4. Daily revenue timeseries
+	tsQuery := `
+		SELECT
+			formatDateTime(toDate(timestamp), '%Y-%m-%d') AS d,
+			sum(toFloat64OrDefault(props['revenue'], 0)) AS rev,
+			count() AS orders
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND (event_name = 'purchase' OR event_name = '$purchase' OR mapContains(props, 'revenue'))
+		GROUP BY d
+		ORDER BY d ASC
+	`
+	tsRows, err := c.conn.Query(ctx, tsQuery, siteID, from, to)
+	if err == nil {
+		defer tsRows.Close()
+		for tsRows.Next() {
+			var d string
+			var rev float64
+			var orders uint64
+			if err := tsRows.Scan(&d, &rev, &orders); err == nil {
+				res.RevenueTimeseries = append(res.RevenueTimeseries, TimeSeriesPoint{
+					Date:           d,
+					Pageviews:      uint64(rev),
+					UniqueVisitors: orders,
+				})
+			}
+		}
+	}
+
+	return res, nil
+}
+
+// ── User Flow Transition Matrix ──
+
+type UserFlowTransition struct {
+	FromPath    string `json:"from_path"`
+	ToPath      string `json:"to_path"`
+	Transitions uint64 `json:"transitions"`
+}
+
+type UserFlowResult struct {
+	Transitions []UserFlowTransition `json:"transitions"`
+	TotalPaths  uint64               `json:"total_paths"`
+}
+
+func (c *Client) QueryUserFlow(ctx context.Context, siteID uint64, from, to time.Time) (*UserFlowResult, error) {
+	res := &UserFlowResult{Transitions: []UserFlowTransition{}}
+
+	querySQL := `
+		SELECT
+			url_path AS from_path,
+			next_path AS to_path,
+			count() AS transitions
+		FROM (
+			SELECT
+				session_id,
+				url_path,
+				leadInFrame(url_path, 1) OVER (PARTITION BY session_id ORDER BY timestamp ASC) AS next_path
+			FROM events
+			WHERE site_id = $1
+			  AND timestamp >= $2
+			  AND timestamp < $3
+			  AND event_name = 'pageview'
+		)
+		WHERE next_path != '' AND url_path != next_path
+		GROUP BY from_path, to_path
+		ORDER BY transitions DESC
+		LIMIT 50
+	`
+	rows, err := c.conn.Query(ctx, querySQL, siteID, from, to)
+	if err != nil {
+		return res, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tr UserFlowTransition
+		if err := rows.Scan(&tr.FromPath, &tr.ToPath, &tr.Transitions); err == nil {
+			res.Transitions = append(res.Transitions, tr)
+			res.TotalPaths++
+		}
+	}
+
+	return res, nil
+}
+
+// ── Campaign Overview ──
+
+type CampaignOverviewResult struct {
+	TotalVisitors uint64          `json:"total_visitors"`
+	TotalSessions uint64          `json:"total_sessions"`
+	BounceRate    float64         `json:"bounce_rate"`
+	TopCampaign   string          `json:"top_campaign"`
+	TopMedium     string          `json:"top_medium"`
+	TopSource     string          `json:"top_source"`
+	Campaigns     []BreakdownItem `json:"campaigns"`
+}
+
+func (c *Client) QueryCampaignOverview(ctx context.Context, siteID uint64, from, to time.Time) (*CampaignOverviewResult, error) {
+	res := &CampaignOverviewResult{
+		Campaigns: []BreakdownItem{},
+	}
+
+	// 1. Overall campaign traffic
+	summaryQuery := `
+		SELECT
+			uniq(visitor_id) AS visitors,
+			uniq(session_id) AS sessions
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+		  AND (utm_campaign != '' OR utm_source != '' OR utm_medium != '')
+	`
+	_ = c.conn.QueryRow(ctx, summaryQuery, siteID, from, to).Scan(&res.TotalVisitors, &res.TotalSessions)
+
+	if res.TotalSessions > 0 {
+		var bounceSessions uint64
+		_ = c.conn.QueryRow(ctx, `
+			SELECT count() FROM (
+				SELECT session_id, count() AS cnt
+				FROM events
+				WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3
+				  AND (utm_campaign != '' OR utm_source != '' OR utm_medium != '')
+				GROUP BY session_id
+				HAVING cnt = 1
+			)
+		`, siteID, from, to).Scan(&bounceSessions)
+		res.BounceRate = float64(bounceSessions) / float64(res.TotalSessions) * 100
+	}
+
+	// Top campaign
+	_ = c.conn.QueryRow(ctx, `
+		SELECT utm_campaign FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND utm_campaign != ''
+		GROUP BY utm_campaign ORDER BY count() DESC LIMIT 1
+	`, siteID, from, to).Scan(&res.TopCampaign)
+
+	// Top medium
+	_ = c.conn.QueryRow(ctx, `
+		SELECT utm_medium FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND utm_medium != ''
+		GROUP BY utm_medium ORDER BY count() DESC LIMIT 1
+	`, siteID, from, to).Scan(&res.TopMedium)
+
+	// Top source
+	_ = c.conn.QueryRow(ctx, `
+		SELECT utm_source FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND utm_source != ''
+		GROUP BY utm_source ORDER BY count() DESC LIMIT 1
+	`, siteID, from, to).Scan(&res.TopSource)
+
+	// Top campaigns breakdown
+	rows, err := c.conn.Query(ctx, `
+		SELECT
+			utm_campaign AS val,
+			count() AS pv,
+			uniq(visitor_id) AS vis
+		FROM events
+		WHERE site_id = $1 AND timestamp >= $2 AND timestamp < $3 AND utm_campaign != ''
+		GROUP BY val
+		ORDER BY pv DESC
+		LIMIT 15
+	`, siteID, from, to)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var it BreakdownItem
+			if err := rows.Scan(&it.Value, &it.Pageviews, &it.UniqueVisitors); err == nil {
+				res.Campaigns = append(res.Campaigns, it)
+			}
+		}
+	}
+
+	return res, nil
 }
 
 // Close closes the connection

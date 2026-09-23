@@ -155,8 +155,88 @@
     }
   }
 
+  // ── Scroll Depth Tracking (25%, 50%, 75%, 100%) ──
+  var trackedMilestones = {}
+  function checkScrollDepth() {
+    var winHeight = window.innerHeight || document.documentElement.clientHeight || 0
+    var docHeight = Math.max(
+      document.body ? document.body.scrollHeight : 0,
+      document.documentElement ? document.documentElement.scrollHeight : 0,
+      winHeight
+    )
+    if (docHeight <= winHeight + 50) return // page fits in one screen
+
+    var scrollTop = window.pageYOffset || (document.documentElement ? document.documentElement.scrollTop : 0) || (document.body ? document.body.scrollTop : 0) || 0
+    var scrollPct = Math.round(((scrollTop + winHeight) / docHeight) * 100)
+
+    var milestones = [25, 50, 75, 100]
+    for (var i = 0; i < milestones.length; i++) {
+      var m = milestones[i]
+      if (scrollPct >= m && !trackedMilestones[m]) {
+        trackedMilestones[m] = true
+        send('$scroll', { depth: String(m), path: location.pathname })
+      }
+    }
+  }
+
+  var scrollTimer = null
+  window.addEventListener('scroll', function () {
+    if (scrollTimer) return
+    scrollTimer = setTimeout(function () {
+      scrollTimer = null
+      checkScrollDepth()
+    }, 250)
+  }, { passive: true })
+
+  // ── Click Heatmap Tracking ──
+  var sessionClickCount = 0
+  document.addEventListener('click', function (e) {
+    if (sessionClickCount >= 30) return // limit per page view
+    var target = e.target
+    if (!target) return
+    var winW = window.innerWidth || (document.documentElement ? document.documentElement.clientWidth : 1000)
+    var winH = window.innerHeight || (document.documentElement ? document.documentElement.clientHeight : 1000)
+    var x = Math.min(100, Math.max(0, Math.round((e.clientX / winW) * 100)))
+    var y = Math.min(100, Math.max(0, Math.round((e.clientY / winH) * 100)))
+    var tag = target.tagName ? target.tagName.toLowerCase() : 'element'
+    var text = (target.innerText || target.value || target.alt || target.title || '').substring(0, 30).trim()
+    sessionClickCount++
+    send('$click', { x: String(x), y: String(y), tag: tag, text: text, path: location.pathname })
+  }, { passive: true })
+
+  // ── JavaScript Error Tracking ──
+  var errorEventsCount = 0
+  function trackError(msg, file, line, col, stack) {
+    if (errorEventsCount >= 10) return // avoid infinite error loops
+    errorEventsCount++
+    var cleanMsg = String(msg || 'Unknown Script Error').substring(0, 200)
+    var cleanFile = String(file || location.pathname).substring(0, 150)
+    var cleanStack = String(stack || '').substring(0, 300)
+    send('$error', {
+      message: cleanMsg,
+      filename: cleanFile,
+      lineno: String(line || 0),
+      colno: String(col || 0),
+      stack: cleanStack,
+      path: location.pathname
+    })
+  }
+
+  window.addEventListener('error', function (e) {
+    if (!e) return
+    trackError(e.message, e.filename, e.lineno, e.colno, e.error && e.error.stack)
+  })
+
+  window.addEventListener('unhandledrejection', function (e) {
+    if (!e) return
+    var reason = e.reason || {}
+    trackError(reason.message || String(reason), location.pathname, 0, 0, reason.stack)
+  })
+
   // Track pageview
   function page() {
+    trackedMilestones = {}
+    sessionClickCount = 0
     send('pageview')
   }
 
@@ -223,6 +303,12 @@
     if (typeof item === 'object' && item !== null && item.event && typeof item.event === 'string') {
       if (!/^gtm\./.test(item.event)) {
         var props = extractProps(item)
+        if (item.ecommerce && typeof item.ecommerce === 'object') {
+          if (item.ecommerce.value || item.ecommerce.revenue) props.revenue = String(item.ecommerce.value || item.ecommerce.revenue)
+          if (item.ecommerce.transaction_id) props.order_id = String(item.ecommerce.transaction_id)
+          if (item.ecommerce.currency) props.currency = String(item.ecommerce.currency)
+          if (Array.isArray(item.ecommerce.items)) props.items_count = String(item.ecommerce.items.length)
+        }
         send(item.event, props)
       }
     } else if (typeof item === 'object' && item !== null && !Array.isArray(item) && !item.event) {
@@ -236,6 +322,11 @@
       var evtName = item[1]
       var evtProps = item[2] || {}
       var propsObj = typeof evtProps === 'object' ? extractProps(evtProps) : {}
+      if (evtProps.ecommerce && typeof evtProps.ecommerce === 'object') {
+        if (evtProps.ecommerce.value || evtProps.ecommerce.revenue) propsObj.revenue = String(evtProps.ecommerce.value || evtProps.ecommerce.revenue)
+        if (evtProps.ecommerce.transaction_id) propsObj.order_id = String(evtProps.ecommerce.transaction_id)
+        if (evtProps.ecommerce.currency) propsObj.currency = String(evtProps.ecommerce.currency)
+      }
       send(evtName, propsObj)
     } else if (
       (Array.isArray(item) || (typeof item === 'object' && '0' in item)) &&
@@ -273,13 +364,9 @@
   var vitals = { lcp: 0, cls: 0, inp: 0, ttfb: 0, fcp: 0 }
   var lastReportedVitals = { lcp: 0, cls: 0, inp: 0, ttfb: 0, fcp: 0 }
 
-  function getVitalRating(metric, val) {
-    if (metric === 'lcp') return val <= 2500 ? 'good' : val <= 4000 ? 'needs-improvement' : 'poor'
-    if (metric === 'cls') return val <= 0.1 ? 'good' : val <= 0.25 ? 'needs-improvement' : 'poor'
-    if (metric === 'inp') return val <= 200 ? 'good' : val <= 500 ? 'needs-improvement' : 'poor'
-    if (metric === 'fcp') return val <= 1800 ? 'good' : val <= 3000 ? 'needs-improvement' : 'poor'
-    if (metric === 'ttfb') return val <= 800 ? 'good' : val <= 1800 ? 'needs-improvement' : 'poor'
-    return 'good'
+  function getVitalRating(m, v) {
+    var lim = m === 'lcp' ? [2500, 4000] : m === 'cls' ? [0.1, 0.25] : m === 'inp' ? [200, 500] : m === 'fcp' ? [1800, 3000] : [800, 1800]
+    return v <= lim[0] ? 'good' : v <= lim[1] ? 'needs-improvement' : 'poor'
   }
 
   function reportVitals(force) {
@@ -540,7 +627,32 @@
 
   var adApi = initAdObserver()
 
-  // ── Public API (Universal Umami + Gravlytics + Ad API) ──
+  // ── E-commerce Tracking Helper ──
+  var ecommerceApi = {
+    purchase: function (order) {
+      if (!order) return
+      var props = {
+        order_id: String(order.order_id || order.id || 'ord_' + Math.random().toString(36).substring(2, 9)),
+        revenue: String(order.revenue || order.value || 0),
+        currency: String(order.currency || 'USD').toUpperCase(),
+        items_count: String(order.items_count || (order.items && order.items.length) || 1),
+        tax: String(order.tax || 0),
+        shipping: String(order.shipping || 0)
+      }
+      send('purchase', props)
+    },
+    addToCart: function (item) {
+      if (!item) return
+      send('add_to_cart', {
+        item_id: String(item.id || item.item_id || ''),
+        item_name: String(item.name || item.item_name || ''),
+        price: String(item.price || 0),
+        currency: String(item.currency || 'USD').toUpperCase()
+      })
+    }
+  }
+
+  // ── Public API (Universal Umami + Gravlytics + Ad API + E-commerce) ──
   var tracker = {
     track: function (name, props) {
       if (!name) {
@@ -555,7 +667,8 @@
       send('identify', p)
     },
     page: page,
-    ad: adApi
+    ad: adApi,
+    ecommerce: ecommerceApi
   }
 
   window.gravlytics = tracker

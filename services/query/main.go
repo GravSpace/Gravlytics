@@ -67,6 +67,12 @@ func main() {
 	mux.HandleFunc("GET /api/v1/stats/events/properties", h.EventProperties)
 	mux.HandleFunc("GET /api/v1/stats/vitals", h.Vitals)
 	mux.HandleFunc("GET /api/v1/stats/ads", h.Ads)
+	mux.HandleFunc("GET /api/v1/stats/scroll", h.Scroll)
+	mux.HandleFunc("GET /api/v1/stats/heatmap", h.Heatmap)
+	mux.HandleFunc("GET /api/v1/stats/errors", h.Errors)
+	mux.HandleFunc("GET /api/v1/stats/ecommerce", h.Ecommerce)
+	mux.HandleFunc("GET /api/v1/stats/flow", h.UserFlow)
+	mux.HandleFunc("GET /api/v1/stats/campaigns/overview", h.CampaignOverview)
 
 	mux.HandleFunc("GET /api/stats/overview", h.Overview)
 	mux.HandleFunc("GET /api/stats/timeseries", h.TimeSeries)
@@ -82,6 +88,12 @@ func main() {
 	mux.HandleFunc("GET /api/stats/events/properties", h.EventProperties)
 	mux.HandleFunc("GET /api/stats/vitals", h.Vitals)
 	mux.HandleFunc("GET /api/stats/ads", h.Ads)
+	mux.HandleFunc("GET /api/stats/scroll", h.Scroll)
+	mux.HandleFunc("GET /api/stats/heatmap", h.Heatmap)
+	mux.HandleFunc("GET /api/stats/errors", h.Errors)
+	mux.HandleFunc("GET /api/stats/ecommerce", h.Ecommerce)
+	mux.HandleFunc("GET /api/stats/flow", h.UserFlow)
+	mux.HandleFunc("GET /api/stats/campaigns/overview", h.CampaignOverview)
 
 	// Health
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

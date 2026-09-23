@@ -244,6 +244,50 @@
 						{preset.label}
 					</button>
 				{/each}
+
+				<!-- Period Comparison Toggle Section -->
+				<div class="mt-2.5 pt-2.5 border-t border-themed flex flex-col gap-1.5 px-1">
+					<span class="text-[10px] font-semibold uppercase tracking-wider text-hint">Comparison</span>
+					<label class="flex items-center gap-2 text-xs text-heading cursor-pointer select-none">
+						<input
+							type="checkbox"
+							checked={dateStore.compareMode !== 'none'}
+							onchange={(e) => {
+								const checked = (e.target as HTMLInputElement).checked;
+								dateStore.setCompareMode(checked ? 'previous_period' : 'none');
+							}}
+							class="rounded border-themed text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+						/>
+						<span>Compare Range</span>
+					</label>
+
+					{#if dateStore.compareMode !== 'none'}
+						<div class="mt-1 flex flex-col gap-1 pl-4 text-[11px] text-body">
+							<label class="flex items-center gap-1.5 cursor-pointer">
+								<input
+									type="radio"
+									name="compareType"
+									value="previous_period"
+									checked={dateStore.compareMode === 'previous_period'}
+									onchange={() => dateStore.setCompareMode('previous_period')}
+									class="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+								/>
+								<span>Prev. Period</span>
+							</label>
+							<label class="flex items-center gap-1.5 cursor-pointer">
+								<input
+									type="radio"
+									name="compareType"
+									value="previous_year"
+									checked={dateStore.compareMode === 'previous_year'}
+									onchange={() => dateStore.setCompareMode('previous_year')}
+									class="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+								/>
+								<span>Previous Year</span>
+							</label>
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Interactive Calendar Grid (shadcn/ui style) -->
