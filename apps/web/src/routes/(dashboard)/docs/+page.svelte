@@ -17,11 +17,12 @@
 		Key,
 		ArrowRight,
 		Gauge,
-		Megaphone
+		Megaphone,
+		Search
 	} from '@lucide/svelte';
 	import { siteStore } from '$lib/stores/site.svelte';
 
-	let activeTab = $state<'gtm' | 'script' | 'datalayer' | 'attributes' | 'sdk' | 'api' | 'security'>('gtm');
+	let activeTab = $state<'gtm' | 'script' | 'datalayer' | 'attributes' | 'sdk' | 'api' | 'security' | 'gsc'>('gtm');
 	let copiedSnippet = $state<string | null>(null);
 
 	const docTabs = [
@@ -31,6 +32,7 @@
 		{ id: 'attributes', label: 'HTML Attributes', icon: Code2 },
 		{ id: 'sdk', label: 'JavaScript SDK', icon: Zap },
 		{ id: 'api', label: 'External REST API', icon: Server },
+		{ id: 'gsc', label: 'Google Search Console', icon: Search },
 		{ id: 'security', label: 'Bot & DDoS Protection', icon: ShieldCheck }
 	] as const;
 
@@ -251,14 +253,24 @@ requests.post(f"{API_BASE}/event", json=payload, headers=HEADERS)`
 				</div>
 				<h1 class="text-xl font-bold tracking-tight text-heading">Documentation & Integration Guide</h1>
 			</div>
-			<a
-				href="/docs/proxy"
-				class="flex items-center gap-1.5 self-start sm:self-auto rounded-md bg-emerald-600/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-600/20 transition-colors"
-			>
-				<ShieldCheck size={14} />
-				<span>AdBlocker Bypass Wizard</span>
-				<ArrowRight size={12} />
-			</a>
+			<div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+				<a
+					href="/docs/google-search-console"
+					class="flex items-center gap-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
+				>
+					<Search size={14} />
+					<span>Search Console Guide</span>
+					<ArrowRight size={12} />
+				</a>
+				<a
+					href="/docs/proxy"
+					class="flex items-center gap-1.5 rounded-md bg-emerald-600/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-600/20 transition-colors"
+				>
+					<ShieldCheck size={14} />
+					<span>AdBlocker Bypass Wizard</span>
+					<ArrowRight size={12} />
+				</a>
+			</div>
 		</div>
 		<p class="text-xs text-label">
 			Comprehensive guide for Google Tag Manager, HTML analytics scripts, Google dataLayer, Web Vitals, Ads Viewability, Bot/DDoS Mitigation, and External REST API Reference.
@@ -721,6 +733,84 @@ requests.post(f"{API_BASE}/event", json=payload, headers=HEADERS)`
 					<p class="text-xs text-label leading-relaxed">
 						Every incoming beacon is restricted to 64 KB via <code class="font-mono text-[11px]">http.MaxBytesReader</code> to reject buffer exhaustion attacks. Legitimate search engine crawlers (Googlebot, Bingbot) are automatically tagged <code class="font-mono text-[11px]">is_bot: "1"</code>, preserving pristine human audience data.
 					</p>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- ── Google Search Console Integration Guide ── -->
+	{#if activeTab === 'gsc'}
+		<div class="card-inset p-6 flex flex-col gap-6">
+			<div class="flex flex-col gap-1">
+				<div class="flex items-center gap-2">
+					<Search size={18} class="text-primary" />
+					<h2 class="text-base font-semibold text-heading">Google Search Console Integration Guide</h2>
+				</div>
+				<p class="text-xs text-label">
+					Import search keywords, impressions, click counts, click-through rates, and Google ranking positions directly into Gravlytics.
+				</p>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div class="p-4 rounded-xl border border-themed bg-card space-y-2">
+					<div class="flex items-center gap-2">
+						<span class="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 font-bold text-xs">1</span>
+						<h3 class="text-xs font-semibold text-heading">Google Cloud Setup</h3>
+					</div>
+					<p class="text-xs text-label leading-relaxed">
+						Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" class="text-indigo-400 underline">Google Cloud Console</a>. Under <strong>APIs &amp; Services &gt; Library</strong>, search for <strong>Google Search Console API</strong> and click <strong>Enable</strong>.
+					</p>
+				</div>
+
+				<div class="p-4 rounded-xl border border-themed bg-card space-y-2">
+					<div class="flex items-center gap-2">
+						<span class="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 font-bold text-xs">2</span>
+						<h3 class="text-xs font-semibold text-heading">Generate Service Account Key</h3>
+					</div>
+					<p class="text-xs text-label leading-relaxed">
+						Navigate to <strong>IAM &amp; Admin &gt; Service Accounts</strong>. Create a service account (e.g. <code>gravlytics-gsc</code>). Open its <strong>Keys</strong> tab, click <strong>Add Key &gt; Create new key (JSON)</strong>, and download the key file.
+					</p>
+				</div>
+
+				<div class="p-4 rounded-xl border border-themed bg-card space-y-2">
+					<div class="flex items-center gap-2">
+						<span class="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 font-bold text-xs">3</span>
+						<h3 class="text-xs font-semibold text-heading">Add User in Search Console</h3>
+					</div>
+					<p class="text-xs text-label leading-relaxed">
+						Open <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer" class="text-indigo-400 underline">Google Search Console</a>. Go to <strong>Settings &gt; Users and permissions &gt; Add user</strong>. Paste the service account email (<code>client_email</code>) with <strong>Full</strong> or <strong>Restricted (Read)</strong> permission.
+					</p>
+				</div>
+
+				<div class="p-4 rounded-xl border border-themed bg-card space-y-2">
+					<div class="flex items-center gap-2">
+						<span class="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 font-bold text-xs">4</span>
+						<h3 class="text-xs font-semibold text-heading">Connect in Gravlytics</h3>
+					</div>
+					<p class="text-xs text-label leading-relaxed">
+						Navigate to <a href="/settings/integrations" class="text-cyan-400 underline font-semibold">Settings &gt; Integrations</a>. Paste your JSON key or upload the file, specify your property URL (e.g. <code>sc-domain:{activeSiteId}</code>), test the connection, and save!
+					</p>
+				</div>
+			</div>
+
+			<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 text-xs">
+				<div class="flex flex-col gap-0.5">
+					<span class="font-semibold text-heading">Ready to connect Google Search Console?</span>
+					<span class="text-label text-[11px]">Configure your credentials now to view organic ranking keywords and CTR data.</span>
+				</div>
+				<div class="flex items-center gap-2">
+					<a
+						href="/docs/google-search-console"
+						class="rounded-md border border-themed bg-input px-3.5 py-1.5 font-medium text-body hover:text-heading hover:bg-card-hover transition-colors whitespace-nowrap"
+					>
+						Read Full Dedicated Tutorial &rarr;
+					</a>
+					<a
+						href="/settings/integrations"
+						class="rounded-md bg-indigo-600 px-3.5 py-1.5 font-semibold text-white hover:bg-indigo-500 transition-colors whitespace-nowrap"
+					>
+						Open Integrations Settings &rarr;
+					</a>
 				</div>
 			</div>
 		</div>

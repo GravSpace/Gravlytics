@@ -68,6 +68,24 @@ export interface Goal {
 	createdAt: string;
 }
 
+export interface SearchConsoleConnection {
+	id: string;
+	siteId: string;
+	authType: 'service_account' | 'oauth';
+	clientEmail: string;
+	serviceAccountKey?: string | null;
+	oauthAccessToken?: string | null;
+	oauthRefreshToken?: string | null;
+	oauthTokenExpiresAt?: string | null;
+	propertyUrl: string;
+	verifiedSites: any[];
+	lastSyncAt?: string | null;
+	lastSyncStatus: string;
+	lastError?: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
 import { hashPassword, verifyPassword } from './crypto';
 import {
 	drizzleDb,
@@ -82,6 +100,7 @@ import {
 	alerts,
 	auditLogs,
 	siteAnnotations,
+	searchConsoleConnections,
 	eq,
 	and,
 	or,
@@ -1284,5 +1303,171 @@ export const db = {
 		if (orgs.length === 0) return [];
 		const sitesList = await this.getUserSites(userId);
 		return sitesList;
+	},
+
+	// ── Google Search Console Connections ──
+
+	async ensureSearchConsoleTable(): Promise<void> {
+		try {
+			await pgClient`
+				CREATE TABLE IF NOT EXISTS search_console_connections (
+					id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+					site_id             UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+					auth_type           VARCHAR(50) NOT NULL DEFAULT 'service_account',
+					client_email        VARCHAR(255) NOT NULL DEFAULT '',
+					service_account_key TEXT,
+					oauth_access_token  TEXT,
+					oauth_refresh_token TEXT,
+					oauth_token_expires_at TIMESTAMPTZ,
+					property_url        VARCHAR(255) NOT NULL,
+					verified_sites      JSONB NOT NULL DEFAULT '[]',
+					last_sync_at        TIMESTAMPTZ,
+					last_sync_status    VARCHAR(50) NOT NULL DEFAULT 'connected',
+					last_error          TEXT,
+					created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+					updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+					UNIQUE(site_id)
+				);
+			`;
+			await pgClient`
+				CREATE INDEX IF NOT EXISTS idx_search_console_site ON search_console_connections(site_id);
+			`;
+		} catch {
+			// ignore if table already exists or db offline
+		}
+	},
+
+	async getSearchConsoleConnection(siteIdOrTrackingId: string): Promise<SearchConsoleConnection | null> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) return null;
+		await this.ensureSearchConsoleTable();
+
+		try {
+			const conn = await drizzleDb.query.searchConsoleConnections.findFirst({
+				where: eq(searchConsoleConnections.siteId, targetSiteId)
+			});
+			if (!conn) return null;
+			return {
+				id: conn.id,
+				siteId: conn.siteId,
+				authType: (conn.authType as 'service_account' | 'oauth') || 'service_account',
+				clientEmail: conn.clientEmail,
+				serviceAccountKey: conn.serviceAccountKey,
+				oauthAccessToken: conn.oauthAccessToken,
+				oauthRefreshToken: conn.oauthRefreshToken,
+				oauthTokenExpiresAt: conn.oauthTokenExpiresAt?.toISOString() || null,
+				propertyUrl: conn.propertyUrl,
+				verifiedSites: Array.isArray(conn.verifiedSites) ? conn.verifiedSites : [],
+				lastSyncAt: conn.lastSyncAt?.toISOString() || null,
+				lastSyncStatus: conn.lastSyncStatus,
+				lastError: conn.lastError,
+				createdAt: conn.createdAt.toISOString(),
+				updatedAt: conn.updatedAt.toISOString()
+			};
+		} catch {
+			return null;
+		}
+	},
+
+	async saveSearchConsoleConnection(
+		siteIdOrTrackingId: string,
+		data: {
+			authType: 'service_account' | 'oauth';
+			clientEmail: string;
+			serviceAccountKey?: string | null;
+			oauthAccessToken?: string | null;
+			oauthRefreshToken?: string | null;
+			oauthTokenExpiresAt?: Date | null;
+			propertyUrl: string;
+			verifiedSites?: any[];
+			lastSyncStatus?: string;
+			lastError?: string | null;
+		}
+	): Promise<SearchConsoleConnection> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) throw new Error('Invalid site ID');
+		await this.ensureSearchConsoleTable();
+
+		const existing = await drizzleDb.query.searchConsoleConnections.findFirst({
+			where: eq(searchConsoleConnections.siteId, targetSiteId)
+		});
+
+		const insertValues = {
+			siteId: targetSiteId,
+			authType: data.authType,
+			clientEmail: data.clientEmail.trim(),
+			serviceAccountKey: data.serviceAccountKey || null,
+			oauthAccessToken: data.oauthAccessToken || null,
+			oauthRefreshToken: data.oauthRefreshToken || null,
+			oauthTokenExpiresAt: data.oauthTokenExpiresAt || null,
+			propertyUrl: data.propertyUrl.trim(),
+			verifiedSites: data.verifiedSites || [],
+			lastSyncAt: new Date(),
+			lastSyncStatus: data.lastSyncStatus || 'connected',
+			lastError: data.lastError || null,
+			updatedAt: new Date()
+		};
+
+		let result;
+		if (existing) {
+			const [updated] = await drizzleDb
+				.update(searchConsoleConnections)
+				.set(insertValues)
+				.where(eq(searchConsoleConnections.siteId, targetSiteId))
+				.returning();
+			result = updated;
+		} else {
+			const [inserted] = await drizzleDb
+				.insert(searchConsoleConnections)
+				.values(insertValues)
+				.returning();
+			result = inserted;
+		}
+
+		return {
+			id: result.id,
+			siteId: result.siteId,
+			authType: (result.authType as 'service_account' | 'oauth') || 'service_account',
+			clientEmail: result.clientEmail,
+			serviceAccountKey: result.serviceAccountKey,
+			oauthAccessToken: result.oauthAccessToken,
+			oauthRefreshToken: result.oauthRefreshToken,
+			oauthTokenExpiresAt: result.oauthTokenExpiresAt?.toISOString() || null,
+			propertyUrl: result.propertyUrl,
+			verifiedSites: Array.isArray(result.verifiedSites) ? result.verifiedSites : [],
+			lastSyncAt: result.lastSyncAt?.toISOString() || null,
+			lastSyncStatus: result.lastSyncStatus,
+			lastError: result.lastError,
+			createdAt: result.createdAt.toISOString(),
+			updatedAt: result.updatedAt.toISOString()
+		};
+	},
+
+	async deleteSearchConsoleConnection(siteIdOrTrackingId: string): Promise<boolean> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) return false;
+		await this.ensureSearchConsoleTable();
+
+		const [deleted] = await drizzleDb
+			.delete(searchConsoleConnections)
+			.where(eq(searchConsoleConnections.siteId, targetSiteId))
+			.returning({ id: searchConsoleConnections.id });
+		return Boolean(deleted);
+	},
+
+	async updateSearchConsoleSyncStatus(siteIdOrTrackingId: string, status: string, error?: string | null): Promise<void> {
+		const targetSiteId = await this.resolveSiteId(siteIdOrTrackingId);
+		if (!targetSiteId) return;
+		await this.ensureSearchConsoleTable();
+
+		await drizzleDb
+			.update(searchConsoleConnections)
+			.set({
+				lastSyncAt: new Date(),
+				lastSyncStatus: status,
+				lastError: error !== undefined ? error : null,
+				updatedAt: new Date()
+			})
+			.where(eq(searchConsoleConnections.siteId, targetSiteId));
 	}
 };

@@ -26,7 +26,8 @@
 		Flame,
 		Bug,
 		ShoppingBag,
-		GitCompare
+		GitCompare,
+		Search
 	} from '@lucide/svelte';
 
 	let { collapsed = $bindable(false) }: { collapsed: boolean } = $props();
@@ -45,6 +46,7 @@
 		{ label: 'Attribution & Segments', href: '/attribution', icon: GitCompare },
 		{ label: 'E-commerce & Revenue', href: '/ecommerce', icon: ShoppingBag },
 		{ label: 'Web Vitals', href: '/vitals', icon: Gauge },
+		{ label: 'Search Console', href: '/search-console', icon: Search, badge: 'SEO' },
 		{ label: 'Error Tracking', href: '/errors', icon: Bug },
 		{ label: 'Acquisition', href: '/sources', icon: Compass },
 		{ label: 'Locations', href: '/locations', icon: Globe },

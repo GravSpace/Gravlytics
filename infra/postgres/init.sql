@@ -187,6 +187,28 @@ CREATE TABLE IF NOT EXISTS site_annotations (
 
 CREATE INDEX idx_site_annotations_site ON site_annotations(site_id);
 
+-- ── Google Search Console Connections ──
+CREATE TABLE IF NOT EXISTS search_console_connections (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    site_id             UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    auth_type           VARCHAR(50) NOT NULL DEFAULT 'service_account',
+    client_email        VARCHAR(255) NOT NULL DEFAULT '',
+    service_account_key TEXT,
+    oauth_access_token  TEXT,
+    oauth_refresh_token TEXT,
+    oauth_token_expires_at TIMESTAMPTZ,
+    property_url        VARCHAR(255) NOT NULL,
+    verified_sites      JSONB NOT NULL DEFAULT '[]',
+    last_sync_at        TIMESTAMPTZ,
+    last_sync_status    VARCHAR(50) NOT NULL DEFAULT 'connected',
+    last_error          TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(site_id)
+);
+
+CREATE INDEX idx_search_console_site ON search_console_connections(site_id);
+
 -- ── Updated_at trigger function ──
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
@@ -205,3 +227,6 @@ CREATE TRIGGER trg_sites_updated_at
     BEFORE UPDATE ON sites FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_saved_reports_updated_at
     BEFORE UPDATE ON saved_reports FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_search_console_updated_at
+    BEFORE UPDATE ON search_console_connections FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+

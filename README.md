@@ -121,6 +121,7 @@ Panduan komprehensif tersedia di folder [`docs/`](./docs/):
 - **[Development Guide](./docs/development.md)** — Panduan setup lokal menggunakan Podman, Go, dan Bun.
 - **[API Reference](./docs/api-reference.md)** — Spesifikasi lengkap Collector API, Query API endpoints, dan client tracker SDK.
 - **[Deployment Guide](./docs/deployment.md)** — Panduan produksi, reverse proxy Caddy/Nginx, dan strategi backup.
+- **[Google Search Console Integration](./docs/integrations/google-search-console.md)** — Panduan menghubungkan Google Search Console (GSC) via Service Account / OAuth2 untuk monitoring kata kunci organik, klik, tayangan, dan peringkat Google.
 - **Milestone Implementation Specs**:
   - [M1 — Data Ingestion Pipeline](./docs/phases/m1-pipeline.md)
   - [M2 — Analytics Core Dashboard](./docs/phases/m2-dashboard.md)

@@ -173,3 +173,27 @@ window.gravlytics.track('signup_button_clicked', {
   source: 'header_cta'
 });
 ```
+
+---
+
+## 4. Google Search Console Integration API
+
+Endpoints for connecting and querying Google Search Console data:
+
+### `GET /api/integrations/search-console`
+Check connection status, active property URL, and sync status for a site (`?siteId=...`).
+
+### `POST /api/integrations/search-console`
+Connect or update Google Search Console credentials (Service Account JSON or OAuth2).
+
+### `DELETE /api/integrations/search-console`
+Disconnect Search Console from a site (`?siteId=...`).
+
+### `POST /api/integrations/search-console/test`
+Test connection validity and auto-discover verified properties accessible by the credentials.
+
+### `GET /api/integrations/search-console/data`
+Retrieve aggregated search queries, landing pages, CTR, impressions, and ranking positions (`?siteId=...&from=YYYY-MM-DD&to=YYYY-MM-DD`).
+
+For full setup instructions, see the **[Google Search Console Integration Guide](./integrations/google-search-console.md)**.
+

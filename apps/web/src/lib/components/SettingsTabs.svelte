@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { User, Sliders, Globe, Users, Shield, Lock, Key } from '@lucide/svelte';
+	import { User, Sliders, Globe, Users, Shield, Lock, Key, Blocks } from '@lucide/svelte';
 
 	interface Props {
 		activeTab?: string;
@@ -13,6 +13,7 @@
 		{ id: 'general', label: 'General', href: '/settings', icon: Sliders },
 		{ id: 'sites', label: 'Sites', href: '/settings/sites', icon: Globe },
 		{ id: 'team', label: 'Team', href: '/settings/team', icon: Users },
+		{ id: 'integrations', label: 'Integrations', href: '/settings/integrations', icon: Blocks },
 		{ id: 'alerts', label: 'Alerts', href: '/settings/alerts', icon: Shield },
 		{ id: 'audit', label: 'Audit Log', href: '/settings/audit', icon: Lock },
 		{ id: 'api-keys', label: 'API Keys', href: '/settings/api-keys', icon: Key }

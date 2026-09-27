@@ -185,6 +185,28 @@ export const siteAnnotations = pgTable('site_annotations', {
 	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
 });
 
+// ── Google Search Console Connections ──
+export const searchConsoleConnections = pgTable('search_console_connections', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	siteId: uuid('site_id')
+		.notNull()
+		.references(() => sites.id, { onDelete: 'cascade' })
+		.unique(),
+	authType: varchar('auth_type', { length: 50 }).default('service_account').notNull(), // 'service_account' | 'oauth'
+	clientEmail: varchar('client_email', { length: 255 }).default('').notNull(),
+	serviceAccountKey: text('service_account_key'),
+	oauthAccessToken: text('oauth_access_token'),
+	oauthRefreshToken: text('oauth_refresh_token'),
+	oauthTokenExpiresAt: timestamp('oauth_token_expires_at', { withTimezone: true }),
+	propertyUrl: varchar('property_url', { length: 255 }).notNull(),
+	verifiedSites: jsonb('verified_sites').default([]).notNull(),
+	lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+	lastSyncStatus: varchar('last_sync_status', { length: 50 }).default('connected').notNull(),
+	lastError: text('last_error'),
+	createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull()
+});
+
 // ── Relations ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -222,7 +244,18 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
 	goals: many(goals),
 	savedReports: many(savedReports),
 	alerts: many(alerts),
-	annotations: many(siteAnnotations)
+	annotations: many(siteAnnotations),
+	searchConsoleConnection: one(searchConsoleConnections, {
+		fields: [sites.id],
+		references: [searchConsoleConnections.siteId]
+	})
+}));
+
+export const searchConsoleConnectionsRelations = relations(searchConsoleConnections, ({ one }) => ({
+	site: one(sites, {
+		fields: [searchConsoleConnections.siteId],
+		references: [sites.id]
+	})
 }));
 
 export const siteAnnotationsRelations = relations(siteAnnotations, ({ one }) => ({
@@ -319,3 +352,6 @@ export type AuditLogInsert = typeof auditLogs.$inferInsert;
 
 export type SiteAnnotationSelect = typeof siteAnnotations.$inferSelect;
 export type SiteAnnotationInsert = typeof siteAnnotations.$inferInsert;
+
+export type SearchConsoleConnectionSelect = typeof searchConsoleConnections.$inferSelect;
+export type SearchConsoleConnectionInsert = typeof searchConsoleConnections.$inferInsert;
