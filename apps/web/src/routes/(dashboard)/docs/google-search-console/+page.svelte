@@ -112,7 +112,7 @@
 				</div>
 				<h1 class="text-xl font-bold tracking-tight text-heading flex items-center gap-2.5">
 					<span>Google Search Console Integration</span>
-					<span class="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-400 border border-amber-500/25">
+					<span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-primary border border-primary/25">
 						Official Guide
 					</span>
 				</h1>
@@ -139,9 +139,9 @@
 	</div>
 
 	<!-- Hero Banner -->
-	<div class="card-inset p-6 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-950/20 via-card to-indigo-950/20 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+	<div class="card-inset p-6 rounded-2xl border border-primary/30 bg-gradient-to-br from-indigo-950/25 via-card to-cyan-950/20 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
 		<div class="flex items-start gap-4 max-w-2xl">
-			<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/25 p-2 shadow-sm">
+			<div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/25 p-2 shadow-sm">
 				<Search size={24} strokeWidth={2.2} />
 			</div>
 			<div class="flex flex-col gap-1.5">
@@ -409,8 +409,8 @@ GSC_REDIRECT_URI=http://localhost:5173/api/integrations/search-console/oauth/cal
 						<p class="text-xs text-label leading-relaxed">Halaman yang aktif menerima tayangan dan klik di Google Web Search.</p>
 					</div>
 
-					<div class="card-inset p-4 rounded-xl border border-amber-500/20 bg-amber-950/10 flex flex-col gap-2">
-						<span class="text-xs font-semibold text-amber-400 flex items-center gap-1.5"><Newspaper size={14} /> Muncul di Google News</span>
+					<div class="card-inset p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/10 flex flex-col gap-2">
+						<span class="text-xs font-semibold text-cyan-400 flex items-center gap-1.5"><Newspaper size={14} /> Muncul di Google News</span>
 						<p class="text-xs text-label leading-relaxed">Artikel berita yang masuk ke dalam Google News tab, app, dan Top Stories carousel.</p>
 					</div>
 				</div>
@@ -478,7 +478,7 @@ GSC_REDIRECT_URI=http://localhost:5173/api/integrations/search-console/oauth/cal
 			<!-- Feature 5: 1-Click CSV Export -->
 			<div class="card-inset p-6 flex flex-col gap-4 border border-themed">
 				<div class="flex items-center gap-2">
-					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-400">
 						<Download size={18} />
 					</div>
 					<div>
@@ -534,7 +534,7 @@ GSC_REDIRECT_URI=http://localhost:5173/api/integrations/search-console/oauth/cal
 
 			<div class="card-inset p-5 flex flex-col gap-2 rounded-xl border border-themed">
 				<div class="flex items-center gap-2 text-xs font-semibold text-heading">
-					<div class="flex h-7 w-7 items-center justify-center rounded bg-amber-500/10 text-amber-400">
+					<div class="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary">
 						<Award size={15} />
 					</div>
 					<span>Average Position (Peringkat Google)</span>
@@ -563,7 +563,7 @@ GSC_REDIRECT_URI=http://localhost:5173/api/integrations/search-console/oauth/cal
 			</div>
 
 			<div class="card-inset p-5 rounded-xl border border-themed flex flex-col gap-2">
-				<div class="flex items-center gap-2 text-xs font-semibold text-amber-400">
+				<div class="flex items-center gap-2 text-xs font-semibold text-primary">
 					<HelpCircle size={15} />
 					<span>Format Property URL: sc-domain vs https://</span>
 				</div>
@@ -689,7 +689,7 @@ GSC_REDIRECT_URI=http://localhost:5173/api/integrations/search-console/oauth/cal
 			<div class="card-inset p-5 flex flex-col gap-3 rounded-xl border border-themed">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-2 text-xs font-semibold text-heading font-mono">
-						<span class="rounded bg-amber-500/10 text-amber-400 px-2 py-0.5 border border-amber-500/20 font-bold">GET</span>
+						<span class="rounded bg-primary/10 text-primary px-2 py-0.5 border border-primary/20 font-bold">GET</span>
 						<span>/api/integrations/search-console/export</span>
 					</div>
 				</div>

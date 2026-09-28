@@ -4,8 +4,7 @@ import { db } from '$lib/server/db';
 import {
 	getAccessTokenFromServiceAccount,
 	refreshOAuthToken,
-	computeSeoOpportunities,
-	getDemoOpportunitiesData
+	computeSeoOpportunities
 } from '$lib/server/search-console';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
@@ -26,12 +25,14 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const connection = await db.getSearchConsoleConnection(site.id);
 
 	if (!connection || (!connection.serviceAccountKey && !connection.oauthAccessToken && !connection.oauthRefreshToken)) {
-		const demo = getDemoOpportunitiesData(site.domain);
 		return json({
-			...demo,
+			strikingDistance: [],
+			lowCtrOpportunities: [],
+			cannibalization: [],
+			anomalies: [],
 			connected: false,
 			propertyUrl: connection?.propertyUrl || `sc-domain:${site.domain}`,
-			isDemoData: true
+			isDemoData: false
 		});
 	}
 
@@ -80,13 +81,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		});
 	} catch (err: any) {
 		console.error('[GSC Opportunities Error]', err);
-		const demo = getDemoOpportunitiesData(site.domain);
 		return json({
-			...demo,
+			strikingDistance: [],
+			lowCtrOpportunities: [],
+			cannibalization: [],
+			anomalies: [],
 			connected: true,
 			propertyUrl: connection.propertyUrl,
-			isDemoData: true,
-			errorWarning: `Opportunities computation warning: ${err.message}. Showing simulated opportunities.`
+			isDemoData: false,
+			errorWarning: `Opportunities computation error: ${err.message}`
 		});
 	}
 };

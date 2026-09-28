@@ -4,8 +4,7 @@ import { db } from '$lib/server/db';
 import {
 	getAccessTokenFromServiceAccount,
 	refreshOAuthToken,
-	inspectUrl,
-	getDemoUrlInspection
+	inspectUrl
 } from '$lib/server/search-console';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -32,11 +31,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const connection = await db.getSearchConsoleConnection(site.id);
 
 		if (!connection || (!connection.serviceAccountKey && !connection.oauthAccessToken && !connection.oauthRefreshToken)) {
-			const demoResult = getDemoUrlInspection(inspectionUrl, site.domain);
-			return json({
-				...demoResult,
-				isDemoData: true
-			});
+			return json(
+				{ error: 'Google Search Console belum terhubung. Hubungkan akun di Settings > Integrations untuk melakukan Live URL Inspection Googlebot.' },
+				{ status: 400 }
+			);
 		}
 
 		let accessToken = '';

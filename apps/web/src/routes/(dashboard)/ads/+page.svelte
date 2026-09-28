@@ -179,7 +179,7 @@
 							<tr class="table-row-hover transition-colors">
 								<td class="py-3 px-4 font-mono font-medium text-heading">
 									<div class="flex items-center gap-1.5">
-										<span class="w-2 h-2 rounded-full {slot.viewability >= 70 ? 'bg-emerald-400' : slot.viewability >= 50 ? 'bg-amber-400' : 'bg-rose-400'}"></span>
+										<span class="w-2 h-2 rounded-full {slot.viewability >= 70 ? 'bg-emerald-400' : slot.viewability >= 50 ? 'bg-cyan-400' : 'bg-rose-400'}"></span>
 										<span>{slot.slot_id}</span>
 									</div>
 								</td>

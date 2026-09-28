@@ -216,7 +216,7 @@
 				title={isLive ? 'Pause live stream updates' : 'Resume live stream'}
 			>
 				{#if isLive}
-					<Pause size={13} class="text-amber-400" />
+					<Pause size={13} class="text-primary" />
 					<span>Pause Stream</span>
 				{:else}
 					<Play size={13} class="text-emerald-400" />

@@ -307,7 +307,7 @@
 															{#each Object.entries(ev.props) as [k, v]}
 																<span class="inline-flex items-center gap-1 rounded badge-tag px-1.5 py-0.5 text-[9px] font-mono text-body">
 																	<span class="text-hint">{k}:</span>
-																	<span class="text-amber-400">{v}</span>
+																	<span class="text-primary font-medium">{v}</span>
 																</span>
 															{/each}
 														</div>

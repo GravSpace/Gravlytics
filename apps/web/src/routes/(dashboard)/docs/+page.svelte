@@ -256,7 +256,7 @@ requests.post(f"{API_BASE}/event", json=payload, headers=HEADERS)`
 			<div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
 				<a
 					href="/docs/google-search-console"
-					class="flex items-center gap-1.5 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors"
+					class="flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
 				>
 					<Search size={14} />
 					<span>Search Console Guide</span>

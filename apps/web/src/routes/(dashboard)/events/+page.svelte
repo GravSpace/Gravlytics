@@ -263,7 +263,7 @@ gravlytics.debug(true);`
 	<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
 		<div>
 			<h1 class="text-lg font-bold tracking-tight text-heading flex items-center gap-2">
-				<Zap size={18} class="text-amber-400" />
+				<Zap size={18} class="text-primary" />
 				Events & Telemetry
 			</h1>
 			<p class="text-xs text-label">
@@ -348,7 +348,7 @@ gravlytics.debug(true);`
 				? 'bg-indigo-500/15 text-heading font-semibold border border-indigo-500/30'
 				: 'text-label hover:text-body hover:bg-card-hover'}"
 		>
-			<Sparkles size={14} class="text-amber-400" />
+			<Sparkles size={14} class="text-cyan-400" />
 			<span>Enhanced Measurement</span>
 			{#if enhancedStats.outbound + enhancedStats.downloads + enhancedStats.search + enhancedStats.forms > 0}
 				<span class="rounded-full bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 text-[10px] font-mono">
@@ -670,7 +670,7 @@ gravlytics.debug(true);`
 						</div>
 						<div class="text-[10px] text-hint mt-0.5">event: form_submit</div>
 					</div>
-					<span class="p-2 rounded-lg bg-amber-500/10 text-amber-400">
+					<span class="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
 						<Send size={16} />
 					</span>
 				</div>
@@ -771,7 +771,7 @@ gravlytics.debug(true);`
 				<div class="card-surface p-4 flex flex-col gap-2">
 					<div class="flex items-center justify-between border-b border-themed pb-2">
 						<div class="flex items-center gap-2">
-							<span class="p-1.5 rounded bg-amber-500/10 text-amber-400"><Send size={14} /></span>
+							<span class="p-1.5 rounded bg-cyan-500/10 text-cyan-400"><Send size={14} /></span>
 							<span class="text-xs font-semibold text-heading">Form Interactions</span>
 						</div>
 						<button
@@ -936,7 +936,7 @@ gravlytics.debug(true);`
 			<div class="flex items-center justify-between border-b border-themed px-4 py-3">
 				<div>
 					<h3 class="text-sm font-semibold text-heading flex items-center gap-2">
-						<Sliders size={14} class="text-amber-400" />
+						<Sliders size={14} class="text-primary" />
 						Property Inspector: <span class="font-mono text-indigo-400">{inspectingEvent}</span>
 					</h3>
 					<p class="text-[11px] text-label">Custom payload attributes collected from dataLayer and custom trackers</p>
@@ -975,7 +975,7 @@ gravlytics.debug(true);`
 										<div class="flex flex-wrap gap-1.5">
 											{#each prop.top_values as v}
 												<span class="inline-flex items-center gap-1 rounded badge-tag px-2 py-0.5 text-xs font-mono">
-													<span class="text-amber-400 font-medium">{v.value}</span>
+													<span class="text-primary font-medium">{v.value}</span>
 													<span class="text-hint text-[10px]">({v.count})</span>
 												</span>
 											{/each}

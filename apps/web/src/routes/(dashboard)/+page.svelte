@@ -460,7 +460,7 @@
 							{#each [
 								{ id: 'indigo', label: 'Indigo', bg: 'bg-indigo-500' },
 								{ id: 'emerald', label: 'Emerald', bg: 'bg-emerald-500' },
-								{ id: 'amber', label: 'Amber', bg: 'bg-amber-500' },
+								{ id: 'cyan', label: 'Cyan', bg: 'bg-cyan-500' },
 								{ id: 'rose', label: 'Rose', bg: 'bg-rose-500' }
 							] as c}
 								<button

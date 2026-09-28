@@ -4,8 +4,7 @@ import { db } from '$lib/server/db';
 import {
 	getAccessTokenFromServiceAccount,
 	refreshOAuthToken,
-	fetchFullSearchConsoleReport,
-	getDemoSearchConsoleData
+	fetchFullSearchConsoleReport
 } from '$lib/server/search-console';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
@@ -29,14 +28,24 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 
 	const connection = await db.getSearchConsoleConnection(site.id);
 
-	// If no connection is configured, return demo/mock data with clear indicator
+	// If no connection is configured, return not-connected state with empty metrics (no dummy/simulated data)
 	if (!connection || (!connection.serviceAccountKey && !connection.oauthAccessToken && !connection.oauthRefreshToken)) {
-		const demo = getDemoSearchConsoleData(site.domain, from, to, searchType);
 		return json({
-			...demo,
 			connected: false,
 			propertyUrl: connection?.propertyUrl || `sc-domain:${site.domain}`,
-			isDemoData: true
+			totalClicks: 0,
+			totalImpressions: 0,
+			averageCtr: 0,
+			averagePosition: 0,
+			searchType,
+			topQueries: [],
+			queries: [],
+			topPages: [],
+			pages: [],
+			countries: [],
+			devices: [],
+			timeSeries: [],
+			isDemoData: false
 		});
 	}
 
@@ -98,14 +107,23 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		console.error('[GSC Fetch Data Error]', err);
 		await db.updateSearchConsoleSyncStatus(site.id, 'error', err.message);
 
-		// Graceful fallback to demo data with warning so the dashboard never breaks
-		const demo = getDemoSearchConsoleData(site.domain, from, to, searchType);
 		return json({
-			...demo,
 			connected: true,
 			propertyUrl: connection.propertyUrl,
-			isDemoData: true,
-			errorWarning: `Search Console live query error: ${err.message}. Showing simulated data preview.`
+			totalClicks: 0,
+			totalImpressions: 0,
+			averageCtr: 0,
+			averagePosition: 0,
+			searchType,
+			topQueries: [],
+			queries: [],
+			topPages: [],
+			pages: [],
+			countries: [],
+			devices: [],
+			timeSeries: [],
+			isDemoData: false,
+			errorWarning: `Search Console live query error: ${err.message}`
 		});
 	}
 };

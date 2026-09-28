@@ -77,7 +77,7 @@
 			aria-label="Toggle Theme (Dark / Light)"
 		>
 			{#if themeStore.current === 'dark'}
-				<Sun size={14} strokeWidth={1.75} class="text-amber-400" />
+				<Sun size={14} strokeWidth={1.75} class="text-yellow-400" />
 			{:else}
 				<Moon size={14} strokeWidth={1.75} class="text-indigo-600" />
 			{/if}
@@ -171,7 +171,7 @@
 							onclick={() => (isUserMenuOpen = false)}
 							class="flex items-center gap-2 px-2.5 py-1.5 text-xs text-label hover:text-heading hover:bg-card-hover rounded-md transition-colors"
 						>
-							<Key size={13} class="text-amber-400" />
+							<Key size={13} class="text-primary" />
 							<span>API Keys</span>
 						</a>
 					</div>

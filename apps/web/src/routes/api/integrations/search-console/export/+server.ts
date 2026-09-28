@@ -6,11 +6,7 @@ import {
 	fetchFullSearchConsoleReport,
 	fetchIndexationOverview,
 	computeSeoOpportunities,
-	listSitemaps,
-	getDemoSearchConsoleData,
-	getDemoIndexationData,
-	getDemoOpportunitiesData,
-	getDemoSitemapsData
+	listSitemaps
 } from '$lib/server/search-console';
 
 function escapeCsvField(val: string | number | null | undefined): string {
@@ -47,56 +43,11 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	let filename = `${site.domain}-gsc-${type}-${timestamp}.csv`;
 
 	if (!hasRealCreds) {
-		// Use demo data for CSV export
-		if (type === 'queries') {
-			const demo = getDemoSearchConsoleData(site.domain, from, to, searchType);
-			csvContent = 'Query,Clicks,Impressions,CTR (%),Position\n';
-			for (const q of demo.topQueries) {
-				csvContent += [escapeCsvField(q.query), q.clicks, q.impressions, q.ctr, q.position].join(',') + '\n';
-			}
-		} else if (type === 'pages') {
-			const demo = getDemoSearchConsoleData(site.domain, from, to, searchType);
-			csvContent = 'Page URL,Clicks,Impressions,CTR (%),Position,In Google News\n';
-			for (const p of demo.topPages) {
-				csvContent += [escapeCsvField(p.page), p.clicks, p.impressions, p.ctr, p.position, p.inGoogleNews ? 'Yes' : 'No'].join(',') + '\n';
-			}
-		} else if (type === 'indexation') {
-			const demo = getDemoIndexationData(site.domain);
-			csvContent = 'URL,Path,Indexed,In Google Search,In Google News,Search Clicks,Search Impressions,News Clicks,News Impressions,Last Crawled,Coverage Status\n';
-			for (const u of demo.urls) {
-				csvContent += [
-					escapeCsvField(u.url),
-					escapeCsvField(u.path),
-					u.indexed ? 'Yes' : 'No',
-					u.inGoogleSearch ? 'Yes' : 'No',
-					u.inGoogleNews ? 'Yes' : 'No',
-					u.searchClicks,
-					u.searchImpressions,
-					u.newsClicks,
-					u.newsImpressions,
-					escapeCsvField(u.lastCrawledAt),
-					escapeCsvField(u.coverageStatus)
-				].join(',') + '\n';
-			}
-		} else if (type === 'opportunities') {
-			const demo = getDemoOpportunitiesData(site.domain);
-			csvContent = 'Opportunity Type,Query,Page,Position,CTR (%),Impressions,Clicks,Potential Click Gain / Missed Clicks\n';
-			for (const s of demo.strikingDistance) {
-				csvContent += ['Striking Distance (#4-#20)', escapeCsvField(s.query), escapeCsvField(s.page), s.position, s.ctr, s.impressions, s.clicks, s.potentialClicksGain].join(',') + '\n';
-			}
-			for (const l of demo.lowCtrOpportunities) {
-				csvContent += ['Low CTR (#1-#5)', escapeCsvField(l.query), escapeCsvField(l.page), l.position, l.ctr, l.impressions, l.clicks, l.missedClicks].join(',') + '\n';
-			}
-		} else if (type === 'sitemaps') {
-			const demo = getDemoSitemapsData(site.domain);
-			csvContent = 'Sitemap URL,Last Submitted,Last Downloaded,Submitted URLs,Indexed URLs,Warnings,Errors\n';
-			for (const s of demo) {
-				const submitted = s.contents.reduce((a, b) => a + b.submitted, 0);
-				const indexed = s.contents.reduce((a, b) => a + b.indexed, 0);
-				csvContent += [escapeCsvField(s.path), escapeCsvField(s.lastSubmitted), escapeCsvField(s.lastDownloaded), submitted, indexed, s.warnings, s.errors].join(',') + '\n';
-			}
-		}
-	} else {
+		return new Response('Google Search Console belum terhubung untuk properti ini. Hubungkan kredensial di Settings > Integrations untuk mengekspor data live.', {
+			status: 400,
+			headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+		});
+	}
 		// Live data export
 		try {
 			let accessToken = '';
@@ -165,7 +116,6 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 			console.error('[GSC Export Error]', err);
 			return new Response(`Export failed: ${err.message}`, { status: 500 });
 		}
-	}
 
 	return new Response(csvContent, {
 		headers: {

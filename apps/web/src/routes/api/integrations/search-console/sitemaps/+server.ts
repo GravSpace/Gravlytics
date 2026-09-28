@@ -6,8 +6,7 @@ import {
 	refreshOAuthToken,
 	listSitemaps,
 	submitSitemap,
-	deleteSitemap,
-	getDemoSitemapsData
+	deleteSitemap
 } from '$lib/server/search-console';
 
 async function getValidAccessToken(connection: any): Promise<string> {
@@ -48,12 +47,11 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const connection = await db.getSearchConsoleConnection(site.id);
 
 	if (!connection || (!connection.serviceAccountKey && !connection.oauthAccessToken && !connection.oauthRefreshToken)) {
-		const demo = getDemoSitemapsData(site.domain);
 		return json({
-			sitemaps: demo,
+			sitemaps: [],
 			connected: false,
 			propertyUrl: connection?.propertyUrl || `sc-domain:${site.domain}`,
-			isDemoData: true
+			isDemoData: false
 		});
 	}
 
@@ -69,13 +67,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		});
 	} catch (err: any) {
 		console.error('[GSC Sitemaps List Error]', err);
-		const demo = getDemoSitemapsData(site.domain);
 		return json({
-			sitemaps: demo,
+			sitemaps: [],
 			connected: true,
 			propertyUrl: connection.propertyUrl,
-			isDemoData: true,
-			errorWarning: `Sitemaps API warning: ${err.message}. Showing simulated sitemap data.`
+			isDemoData: false,
+			errorWarning: `Sitemaps API error: ${err.message}`
 		});
 	}
 };

@@ -178,7 +178,7 @@
 						: 'border-themed bg-input/40 hover:border-indigo-500/30 hover:bg-card-hover'}"
 				>
 					<div class="flex w-full items-center justify-between">
-						<div class="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500/10 text-amber-400">
+						<div class="flex h-7 w-7 items-center justify-center rounded-md bg-cyan-500/10 text-cyan-400">
 							<FileCode size={15} />
 						</div>
 						{#if selectedFormat === 'json'}

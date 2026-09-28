@@ -24,7 +24,7 @@
 			aria-label="Toggle Dark / Light Theme"
 		>
 			{#if themeStore.current === 'dark'}
-				<Sun size={16} class="text-amber-400" />
+				<Sun size={16} class="text-yellow-400" />
 			{:else}
 				<Moon size={16} class="text-indigo-600" />
 			{/if}

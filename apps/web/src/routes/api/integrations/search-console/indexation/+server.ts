@@ -4,8 +4,7 @@ import { db } from '$lib/server/db';
 import {
 	getAccessTokenFromServiceAccount,
 	refreshOAuthToken,
-	fetchIndexationOverview,
-	getDemoIndexationData
+	fetchIndexationOverview
 } from '$lib/server/search-console';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
@@ -26,12 +25,15 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const connection = await db.getSearchConsoleConnection(site.id);
 
 	if (!connection || (!connection.serviceAccountKey && !connection.oauthAccessToken && !connection.oauthRefreshToken)) {
-		const demo = getDemoIndexationData(site.domain);
 		return json({
-			...demo,
+			totalUrlsIndexed: 0,
+			totalUrlsInGoogleSearch: 0,
+			totalUrlsInGoogleNews: 0,
+			totalExcludedOrPending: 0,
+			urls: [],
 			connected: false,
 			propertyUrl: connection?.propertyUrl || `sc-domain:${site.domain}`,
-			isDemoData: true
+			isDemoData: false
 		});
 	}
 
@@ -80,13 +82,16 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		});
 	} catch (err: any) {
 		console.error('[GSC Indexation Error]', err);
-		const demo = getDemoIndexationData(site.domain);
 		return json({
-			...demo,
+			totalUrlsIndexed: 0,
+			totalUrlsInGoogleSearch: 0,
+			totalUrlsInGoogleNews: 0,
+			totalExcludedOrPending: 0,
+			urls: [],
 			connected: true,
 			propertyUrl: connection.propertyUrl,
-			isDemoData: true,
-			errorWarning: `Indexation query error: ${err.message}. Showing simulated indexation data.`
+			isDemoData: false,
+			errorWarning: `Indexation query error: ${err.message}`
 		});
 	}
 };

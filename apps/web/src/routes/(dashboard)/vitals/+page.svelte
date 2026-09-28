@@ -167,7 +167,7 @@
 							></div>
 							<div
 								style="width: {metric.needs_improvement_pct ?? 0}%"
-								class="h-full bg-amber-500 transition-all duration-500"
+								class="h-full bg-orange-500 transition-all duration-500"
 								title="Needs Improvement: {(metric.needs_improvement_pct ?? 0).toFixed(1)}%"
 							></div>
 							<div

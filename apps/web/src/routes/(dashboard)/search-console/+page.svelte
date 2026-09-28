@@ -578,7 +578,7 @@
 					{#if activeSurface === 'web'}
 						<Search size={16} strokeWidth={2.25} />
 					{:else if activeSurface === 'news'}
-						<Newspaper size={16} strokeWidth={2.25} class="text-amber-400" />
+						<Newspaper size={16} strokeWidth={2.25} class="text-cyan-400" />
 					{:else if activeSurface === 'discover'}
 						<Compass size={16} strokeWidth={2.25} class="text-rose-400" />
 					{:else if activeSurface === 'opportunities'}
@@ -592,14 +592,15 @@
 				<h1 class="text-lg font-bold tracking-tight text-heading">
 					Google Search Console & SEO Intelligence
 				</h1>
-				{#if data?.isDemoData || indexationData?.isDemoData || opportunitiesData?.isDemoData || sitemapsData?.isDemoData}
-					<span class="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-400 border border-amber-500/25">
-						Preview / Simulated Data
-					</span>
-				{:else if data?.connected || indexationData?.connected || sitemapsData?.connected}
-					<span class="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-400 border border-emerald-500/25 flex items-center gap-1">
+				{#if data?.connected || indexationData?.connected || sitemapsData?.connected}
+					<span class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-mono font-semibold text-emerald-400 border border-emerald-500/25 flex items-center gap-1">
 						<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-						Live GSC Sync
+						Live GSC Connected
+					</span>
+				{:else}
+					<span class="rounded-full bg-zinc-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-hint border border-themed flex items-center gap-1.5">
+						<span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span>
+						Belum Terhubung
 					</span>
 				{/if}
 			</div>
@@ -642,7 +643,7 @@
 							onclick={() => triggerExportCsv('indexation')}
 							class="flex items-center gap-2 px-3 py-1.5 rounded-md text-left text-body hover:text-heading hover:bg-card-hover transition-colors"
 						>
-							<FileSpreadsheet size={13} class="text-amber-400" />
+							<FileSpreadsheet size={13} class="text-cyan-400" />
 							<span>Status Indeks URL</span>
 						</button>
 						<button
@@ -667,7 +668,7 @@
 				href="/docs/google-search-console"
 				class="flex items-center gap-1.5 rounded-md border border-themed bg-input px-3 py-1.5 text-xs font-medium text-body hover:text-heading hover:bg-card-hover transition-colors"
 			>
-				<BookOpen size={12} class="text-amber-400" />
+				<BookOpen size={12} class="text-primary" />
 				<span>Panduan GSC</span>
 			</a>
 
@@ -710,7 +711,7 @@
 		<button
 			onclick={() => handleSurfaceChange('news')}
 			class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all {activeSurface === 'news'
-				? 'bg-gradient-to-r from-amber-600 to-amber-500 text-white shadow-sm'
+				? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-sm'
 				: 'text-label hover:text-heading hover:bg-card-hover'}"
 		>
 			<Newspaper size={13} />
@@ -764,34 +765,81 @@
 		</button>
 	</div>
 
-	<!-- Not Connected / Demo Alert Banner -->
-	{#if data?.isDemoData && !data?.connected}
-		<div class="card-inset p-4 rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-card to-cyan-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-			<div class="flex items-start gap-3">
-				<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 mt-0.5">
-					<Sparkles size={18} />
+	<!-- Dedicated View When Search Console is Not Connected -->
+	{#if !data?.connected}
+		<div class="card-inset p-8 sm:p-10 rounded-2xl border border-indigo-500/25 bg-gradient-to-b from-indigo-950/20 via-card to-card flex flex-col items-center text-center gap-6 my-2">
+			<div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 text-indigo-400 border border-indigo-500/30 shadow-lg">
+				<Search size={32} />
+			</div>
+
+			<div class="flex flex-col items-center gap-2 max-w-xl">
+				<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-mono">
+					<KeyRound size={12} />
+					<span>Integrasi Google Search Console Resmi</span>
 				</div>
-				<div class="flex flex-col gap-0.5">
-					<h3 class="text-xs font-semibold text-heading">Koneksikan Akun Google Search Console Anda</h3>
-					<p class="text-xs text-label max-w-2xl leading-relaxed">
-						Saat ini Anda melihat data simulasi organik, Discover, dan Google News. Hubungkan Search Console via Service Account atau OAuth untuk mengaktifkan sinkronisasi otomatis.
+				<h2 class="text-xl sm:text-2xl font-bold tracking-tight text-heading">
+					Google Search Console Belum Terhubung
+				</h2>
+				<p class="text-xs sm:text-sm text-label leading-relaxed">
+					Website <strong class="font-mono text-heading">{activeSite?.domain || 'properti ini'}</strong> belum terhubung ke Google Search Console API. Tidak ada data dummy yang ditampilkan. Hubungkan Service Account atau OAuth untuk menampilkan metrik klik, impresi, CTR, peringkat kata kunci, dan status indeks langsung dari Googlebot.
+				</p>
+			</div>
+
+			<div class="flex flex-wrap items-center justify-center gap-3">
+				<a
+					href="/settings/integrations"
+					class="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-all cursor-pointer"
+				>
+					<KeyRound size={15} />
+					<span>Hubungkan Search Console</span>
+				</a>
+				<a
+					href="/docs/google-search-console"
+					class="flex items-center gap-2 rounded-lg border border-themed bg-input px-4 py-2.5 text-xs sm:text-sm font-medium text-body hover:text-heading hover:bg-card-hover transition-all"
+				>
+					<BookOpen size={15} class="text-primary" />
+					<span>Panduan Integrasi GSC</span>
+				</a>
+			</div>
+
+			<!-- Feature Highlights Bento -->
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 w-full max-w-4xl text-left mt-2">
+				<div class="card-inset p-4 rounded-xl border border-themed flex flex-col gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+						<Search size={16} />
+					</div>
+					<h4 class="text-xs font-semibold text-heading">Kata Kunci &amp; Ranking SERP</h4>
+					<p class="text-[11px] text-label leading-relaxed">
+						Lacak query pencarian nyata yang diketik audiens di Google, total klik, impresi tayangan, CTR, dan posisi rata-rata halaman.
+					</p>
+				</div>
+
+				<div class="card-inset p-4 rounded-xl border border-themed flex flex-col gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+						<Newspaper size={16} />
+					</div>
+					<h4 class="text-xs font-semibold text-heading">Google News &amp; Discover</h4>
+					<p class="text-[11px] text-label leading-relaxed">
+						Pantau performa khusus artikel berita pada tab Google News dan feed personal Google Discover langsung dari data Google.
+					</p>
+				</div>
+
+				<div class="card-inset p-4 rounded-xl border border-themed flex flex-col gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+						<ShieldCheck size={16} />
+					</div>
+					<h4 class="text-xs font-semibold text-heading">Status Indeks &amp; Sitemaps</h4>
+					<p class="text-[11px] text-label leading-relaxed">
+						Cek status pengindeksan Googlebot secara live, lakukan URL inspection langsung, dan kirim file XML Sitemap secara otomatis.
 					</p>
 				</div>
 			</div>
-
-			<a
-				href="/settings/integrations"
-				class="flex shrink-0 items-center gap-1.5 rounded-md bg-gradient-to-r from-indigo-600 to-indigo-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:from-indigo-500 hover:to-indigo-400 transition-all whitespace-nowrap"
-			>
-				<KeyRound size={13} />
-				<span>Hubungkan Search Console</span>
-			</a>
 		</div>
-	{/if}
+	{:else}
 
 	{#if data?.errorWarning}
-		<div class="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
-			<AlertCircle size={15} class="shrink-0 text-amber-400" />
+		<div class="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-body">
+			<AlertCircle size={15} class="shrink-0 text-primary" />
 			<span>{data.errorWarning}</span>
 		</div>
 	{/if}
@@ -808,7 +856,7 @@
 					<span class="font-medium">
 						{activeSurface === 'news' ? 'Google News Clicks' : activeSurface === 'discover' ? 'Google Discover Clicks' : 'Total Search Clicks'}
 					</span>
-					<div class="flex h-6 w-6 items-center justify-center rounded {activeSurface === 'news' ? 'bg-amber-500/10 text-amber-400' : activeSurface === 'discover' ? 'bg-rose-500/10 text-rose-400' : 'bg-indigo-500/10 text-indigo-400'}">
+					<div class="flex h-6 w-6 items-center justify-center rounded {activeSurface === 'news' ? 'bg-cyan-500/10 text-cyan-400' : activeSurface === 'discover' ? 'bg-rose-500/10 text-rose-400' : 'bg-indigo-500/10 text-indigo-400'}">
 						<MousePointerClick size={14} />
 					</div>
 				</div>
@@ -816,7 +864,7 @@
 					<span class="font-mono text-2xl font-bold tracking-tight text-heading">
 						{formatNum(data?.totalClicks || 0)}
 					</span>
-					<span class="text-[11px] font-mono {activeSurface === 'news' ? 'text-amber-400' : activeSurface === 'discover' ? 'text-rose-400' : 'text-emerald-400'} font-medium flex items-center">
+					<span class="text-[11px] font-mono {activeSurface === 'news' ? 'text-cyan-400' : activeSurface === 'discover' ? 'text-rose-400' : 'text-emerald-400'} font-medium flex items-center">
 						<TrendingUp size={11} class="mr-0.5" />
 						{activeSurface === 'news' ? 'News Feed' : activeSurface === 'discover' ? 'Discover Feed' : 'Organic'}
 					</span>
@@ -868,7 +916,7 @@
 			<div class="card-inset flex flex-col gap-2 p-4 transition-all border border-themed">
 				<div class="flex items-center justify-between text-xs text-label">
 					<span class="font-medium">{activeSurface === 'discover' ? 'Platform Utama' : 'Rata-rata Posisi'}</span>
-					<div class="flex h-6 w-6 items-center justify-center rounded bg-amber-500/10 text-amber-400">
+					<div class="flex h-6 w-6 items-center justify-center rounded bg-primary/10 text-primary">
 						{#if activeSurface === 'discover'}
 							<Smartphone size={14} />
 						{:else}
@@ -902,14 +950,14 @@
 			<div class="card-inset flex flex-col gap-3 p-5 border border-themed">
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-2">
-						<TrendingUp size={14} class={activeSurface === 'news' ? 'text-amber-400' : activeSurface === 'discover' ? 'text-rose-400' : 'text-indigo-400'} />
+						<TrendingUp size={14} class={activeSurface === 'news' ? 'text-cyan-400' : activeSurface === 'discover' ? 'text-rose-400' : 'text-indigo-400'} />
 						<h3 class="text-xs font-semibold uppercase tracking-wider text-body">
 							{activeSurface === 'news' ? 'Tren Google News (Clicks & Impressions)' : activeSurface === 'discover' ? 'Tren Google Discover (Clicks & Impressions)' : 'Tren Pencarian Google (Clicks & Impressions)'}
 						</h3>
 					</div>
 					<div class="flex items-center gap-3 text-[11px] font-mono">
 						<span class="flex items-center gap-1.5 text-label">
-							<span class="h-2 w-2 rounded-full {activeSurface === 'news' ? 'bg-amber-500' : activeSurface === 'discover' ? 'bg-rose-500' : 'bg-indigo-500'}"></span> Clicks
+							<span class="h-2 w-2 rounded-full {activeSurface === 'news' ? 'bg-cyan-500' : activeSurface === 'discover' ? 'bg-rose-500' : 'bg-indigo-500'}"></span> Clicks
 						</span>
 						<span class="flex items-center gap-1.5 text-label">
 							<span class="h-2 w-2 rounded-full bg-cyan-400/50"></span> Impressions
@@ -927,7 +975,7 @@
 						>
 							<div
 								class="w-full rounded-t transition-all duration-300 opacity-75 group-hover:opacity-100 {activeSurface === 'news'
-									? 'bg-gradient-to-t from-amber-600 to-yellow-400 group-hover:from-amber-500 group-hover:to-yellow-300'
+									? 'bg-gradient-to-t from-blue-600 to-cyan-400 group-hover:from-blue-500 group-hover:to-cyan-300'
 									: activeSurface === 'discover'
 										? 'bg-gradient-to-t from-rose-600 to-pink-400 group-hover:from-rose-500 group-hover:to-pink-300'
 										: 'bg-gradient-to-t from-indigo-600 to-cyan-400 group-hover:from-indigo-500 group-hover:to-cyan-300'}"
@@ -1122,7 +1170,7 @@
 													<Search size={9} /> Web
 												</span>
 												{#if item.inGoogleNews || activeSurface === 'news'}
-													<span class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400 border border-amber-500/20">
+													<span class="inline-flex items-center gap-1 rounded bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-400 border border-cyan-500/20">
 														<Newspaper size={9} /> News
 													</span>
 												{/if}
@@ -1277,10 +1325,10 @@
 				<span class="text-[11px] text-hint">Halaman aktif mendapatkan impresi organik di Google Search</span>
 			</div>
 
-			<div class="card-inset flex flex-col gap-2 p-4 transition-all border border-amber-500/20 bg-amber-950/10">
+			<div class="card-inset flex flex-col gap-2 p-4 transition-all border border-cyan-500/20 bg-cyan-950/10">
 				<div class="flex items-center justify-between text-xs text-label">
-					<span class="font-medium text-amber-400">Muncul di Google News</span>
-					<div class="flex h-6 w-6 items-center justify-center rounded bg-amber-500/10 text-amber-400">
+					<span class="font-medium text-cyan-400">Muncul di Google News</span>
+					<div class="flex h-6 w-6 items-center justify-center rounded bg-cyan-500/10 text-cyan-400">
 						<Newspaper size={14} />
 					</div>
 				</div>
@@ -1288,15 +1336,15 @@
 					<span class="font-mono text-2xl font-bold tracking-tight text-heading">
 						{indexationData?.totalUrlsInGoogleNews || 0}
 					</span>
-					<span class="text-[11px] font-mono text-amber-400 font-medium">Artikel News</span>
+					<span class="text-[11px] font-mono text-cyan-400 font-medium">Artikel News</span>
 				</div>
 				<span class="text-[11px] text-hint">Artikel yang lolos dan muncul pada tab Google News &amp; Top Stories</span>
 			</div>
 
-			<div class="card-inset flex flex-col gap-2 p-4 transition-all border border-slate-700">
+			<div class="card-inset flex flex-col gap-2 p-4 transition-all border border-rose-500/20 bg-rose-950/10">
 				<div class="flex items-center justify-between text-xs text-label">
-					<span class="font-medium">Belum Terindex / Dikecualikan</span>
-					<div class="flex h-6 w-6 items-center justify-center rounded bg-amber-500/10 text-amber-400">
+					<span class="font-medium text-rose-400">Belum Terindex / Dikecualikan</span>
+					<div class="flex h-6 w-6 items-center justify-center rounded bg-rose-500/10 text-rose-400">
 						<AlertTriangle size={14} />
 					</div>
 				</div>
@@ -1304,7 +1352,7 @@
 					<span class="font-mono text-2xl font-bold tracking-tight text-heading">
 						{indexationData?.totalExcludedOrPending || 0}
 					</span>
-					<span class="text-[11px] font-mono text-amber-400 font-medium">Perlu Tinjauan</span>
+					<span class="text-[11px] font-mono text-rose-400 font-medium">Perlu Tinjauan</span>
 				</div>
 				<span class="text-[11px] text-hint">URL ditemukan namun belum diindeks atau diblokir robots.txt</span>
 			</div>
@@ -1379,7 +1427,7 @@
 									<CheckCircle2 size={13} /> URL Ada di Google (Terindex)
 								</span>
 							{:else}
-								<span class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-400 border border-amber-500/25">
+								<span class="inline-flex items-center gap-1.5 rounded-full bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-400 border border-rose-500/25">
 									<AlertTriangle size={13} /> URL Belum Terindex di Google
 								</span>
 							{/if}
@@ -1391,7 +1439,7 @@
 							{/if}
 
 							{#if inspectionResult.isInGoogleNews}
-								<span class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/20">
+								<span class="inline-flex items-center gap-1 rounded bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-400 border border-cyan-500/20">
 									<Newspaper size={11} /> Muncul di Google News
 								</span>
 							{/if}
@@ -1415,7 +1463,7 @@
 						</div>
 						<div class="flex flex-col gap-0.5">
 							<span class="text-[10px] text-hint uppercase tracking-wider font-sans">Status Pengindeksan</span>
-							<span class="font-semibold {inspectionResult.indexingState === 'INDEXING_ALLOWED' ? 'text-emerald-400' : 'text-amber-400'}">
+							<span class="font-semibold {inspectionResult.indexingState === 'INDEXING_ALLOWED' ? 'text-emerald-400' : 'text-rose-400'}">
 								{inspectionResult.indexingState === 'INDEXING_ALLOWED' ? 'Diizinkan (Allowed)' : inspectionResult.indexingState}
 							</span>
 						</div>
@@ -1468,7 +1516,7 @@
 					<button
 						onclick={() => (indexationFilter = 'news')}
 						class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all {indexationFilter === 'news'
-							? 'bg-amber-600 text-white shadow-xs'
+							? 'bg-blue-600 text-white shadow-xs'
 							: 'text-label hover:text-heading hover:bg-card-hover'}"
 					>
 						<Newspaper size={13} />
@@ -1538,7 +1586,7 @@
 											</div>
 										{:else}
 											<div class="flex flex-col gap-0.5">
-												<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400">
+												<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-400">
 													<AlertTriangle size={12} /> Dikecualikan
 												</span>
 												<span class="text-[10px] text-hint">{item.coverageStatus}</span>
@@ -1560,7 +1608,7 @@
 									<td class="py-2.5 px-3">
 										{#if item.inGoogleNews}
 											<div class="flex flex-col gap-0.5">
-												<span class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/20 w-fit">
+												<span class="inline-flex items-center gap-1 rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400 border border-cyan-500/20 w-fit">
 													<Check size={10} /> Muncul 📰
 												</span>
 												<span class="text-[10px] text-label">{formatNum(item.newsClicks)} clicks · {formatNum(item.newsImpressions)} impr</span>
@@ -1605,8 +1653,8 @@
 		{#if opportunitiesData?.anomalies && opportunitiesData.anomalies.length > 0}
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
 				{#each opportunitiesData.anomalies as anomaly}
-					<div class="card-inset p-4 rounded-xl border {anomaly.type === 'spike' ? 'border-emerald-500/30 bg-emerald-950/15' : 'border-amber-500/30 bg-amber-950/15'} flex items-start gap-3">
-						<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {anomaly.type === 'spike' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'} mt-0.5">
+					<div class="card-inset p-4 rounded-xl border {anomaly.type === 'spike' ? 'border-emerald-500/30 bg-emerald-950/15' : 'border-rose-500/30 bg-rose-950/15'} flex items-start gap-3">
+						<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg {anomaly.type === 'spike' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'} mt-0.5">
 							{#if anomaly.type === 'spike'}
 								<TrendingUp size={16} />
 							{:else}
@@ -1616,7 +1664,7 @@
 						<div class="flex flex-col gap-1 flex-1">
 							<div class="flex items-center justify-between">
 								<h4 class="text-xs font-bold text-heading">{anomaly.title}</h4>
-								<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded {anomaly.type === 'spike' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">
+								<span class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded {anomaly.type === 'spike' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}">
 									{anomaly.metric}
 								</span>
 							</div>
@@ -1717,7 +1765,7 @@
 									<th class="py-2.5 px-3 font-medium text-right">Posisi</th>
 									<th class="py-2.5 px-3 font-medium text-right">CTR Aktual</th>
 									<th class="py-2.5 px-3 font-medium text-right">Target CTR</th>
-									<th class="py-2.5 px-3 font-medium text-right text-amber-400">Estimasi Klik Terlewat</th>
+									<th class="py-2.5 px-3 font-medium text-right text-primary">Estimasi Klik Terlewat</th>
 								</tr>
 							</thead>
 							<tbody class="divide-y divide-themed">
@@ -1732,7 +1780,7 @@
 										</td>
 										<td class="py-2.5 px-3 text-right text-rose-400 font-semibold">{item.ctr.toFixed(1)}%</td>
 										<td class="py-2.5 px-3 text-right text-label">{item.expectedCtr.toFixed(1)}%</td>
-										<td class="py-2.5 px-3 text-right font-bold text-amber-400">
+										<td class="py-2.5 px-3 text-right font-bold text-primary">
 											+{formatNum(item.missedClicks)} klik terlewat
 										</td>
 									</tr>
@@ -1910,7 +1958,7 @@
 												{item.errors} Error
 											</span>
 										{:else if item.warnings > 0}
-											<span class="rounded bg-amber-500/10 text-amber-400 px-1.5 py-0.5 text-[10px] border border-amber-500/20 font-semibold">
+											<span class="rounded bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] border border-primary/20 font-semibold">
 												{item.warnings} Warning
 											</span>
 										{:else}
@@ -1936,4 +1984,5 @@
 			</div>
 		</div>
 	{/if}
+{/if}
 </div>

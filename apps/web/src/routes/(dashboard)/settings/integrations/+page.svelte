@@ -313,8 +313,8 @@
 		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-themed pb-5">
 			<div class="flex items-start sm:items-center gap-3.5">
 				<!-- Google Search Console Icon Emblem -->
-				<div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 via-primary/20 to-cyan-500/20 p-[1px] border border-themed">
-					<div class="flex h-full w-full items-center justify-center rounded-[11px] bg-slate-900/90 text-amber-400">
+				<div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 via-indigo-500/20 to-cyan-500/30 p-[1px] border border-themed">
+					<div class="flex h-full w-full items-center justify-center rounded-[11px] bg-slate-900/90 text-primary">
 						<Search size={20} strokeWidth={2.25} />
 					</div>
 				</div>

@@ -189,11 +189,11 @@
 									<h3 class="text-xs font-semibold text-heading">{member.name}</h3>
 									<span
 										class="rounded px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase {member.role === 'Owner'
-											? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+											? 'bg-primary/10 text-primary border border-primary/25'
 											: member.role === 'Admin'
 											? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20'
 											: member.role === 'Editor'
-											? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20'
+											? 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border border-cyan-500/20'
 											: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'}"
 									>
 										{member.role}
@@ -230,21 +230,21 @@
 	{#if invitations.length > 0}
 		<div class="space-y-3 pt-2">
 			<div class="flex items-center gap-2">
-				<Clock size={14} class="text-amber-400" />
+				<Clock size={14} class="text-primary" />
 				<h2 class="text-xs font-semibold uppercase tracking-wider text-heading">Pending Invitations ({invitations.length})</h2>
 			</div>
 
 			<div class="flex flex-col gap-2">
 				{#each invitations as inv}
-					<div class="flex items-center justify-between p-3 px-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+					<div class="flex items-center justify-between p-3 px-4 rounded-xl border border-primary/20 bg-primary/5">
 						<div class="flex items-center gap-3">
-							<div class="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+							<div class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20">
 								<Mail size={13} />
 							</div>
 							<div>
 								<div class="flex items-center gap-2">
 									<span class="text-xs font-semibold text-heading font-mono">{inv.email}</span>
-									<span class="px-1.5 py-0.2 rounded text-[9px] font-mono border border-amber-500/30 text-amber-400">
+									<span class="px-1.5 py-0.2 rounded text-[9px] font-mono border border-primary/30 text-primary">
 										{inv.role}
 									</span>
 								</div>

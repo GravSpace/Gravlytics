@@ -152,7 +152,7 @@
 						<span class="text-[9px] text-hint">Operational • Realtime Sync</span>
 					</div>
 				</div>
-				<Sparkles size={12} class="text-amber-400/80" />
+				<Sparkles size={12} class="text-cyan-400" />
 			</div>
 		{/if}
 	</div>
